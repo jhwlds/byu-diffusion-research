@@ -17,21 +17,19 @@
 **This report.** We answer with direct kNN distances `d_FF`, `d_SS`, `d_FS`, `d_SF` and relative baselines `R_compact`, `R_sep` on anchored F∗, S∗ (no new training or sampling; existing trajectories and `distance_summary.csv`).
 
 
-| Symbol      | Meaning                                             |
-| ----------- | --------------------------------------------------- |
-| *c*         | training checkpoint                                 |
-| *τ*         | denoising timestep                                  |
-| F∗          | final anchored high-disagreement ids (max, *n*=100) |
-| S∗          | final anchored low-disagreement ids (max, *n*=100)  |
+| Symbol   | Meaning                                                                     |
+| -------- | --------------------------------------------------------------------------- |
+| *c*      | training checkpoint                                                         |
+| *τ*      | denoising timestep                                                          |
+| F∗       | final anchored high-disagreement ids (max, *n*=100)                         |
+| S∗       | final anchored low-disagreement ids (max, *n*=100)                          |
 | z_i(c,τ) | PCA-50 mean-state; **one PCA basis per τ**, shared across all checkpoints c |
-| *k*         | nearest neighbors (*k*=10)                          |
+| *k*      | nearest neighbors (*k*=10)                                                  |
 
 
-*Earlier narrative:* [`2026-10-01_identity-retention.md`](2026-10-01_identity-retention.md) (**unchanged** by this document).
+*Earlier narrative:* `[2026-10-01_identity-retention.md](2026-10-01_identity-retention.md)` (**unchanged** by this document).
 
 ---
-
-
 
 # 1. What did the previous report establish?
 
@@ -42,8 +40,6 @@
 **Unresolved limitation.** `E_F` answers label over-representation, not geometric compactness or F∗/S∗ separation → motivates distance analysis below.
 
 ---
-
-
 
 # 2. When does final disagreement identity stabilize?
 
@@ -75,15 +71,19 @@ $$
 
 ---
 
-
-
 # 3. Does local enrichment mean F∗ is actually compact?
+
+For each checkpoint *c*, we independently define a local top-10% set at each denoising timestep *τ* ∈ {750, 500, 250, 0}. Each of these four local sets is then compared against the fixed final anchor F∗, defined at (*c*=46000, *τ*=0).
 
 $$
 E_F(c,\tau) = \frac{1}{\left|F^{\ast}\right|} \sum_{i \in F^{\ast}} \frac{\left|\{ j \in N_k(i) : j \in F^{\ast} \}\right|}{k}
 $$
 
-*Plain English:* “What fraction of neighbors of anchored F∗ are also F∗?” (pool = 1000; random ≈ 0.10.)
+$$
+\left|F^{\ast}\right| = 100,\qquad k = 10
+$$
+
+*Plain English:* Here, |F∗| = 100 and k = 10. For each anchored F∗ sample, we compute the fraction of its 10 nearest neighbors that are also in F∗, then average that fraction across all 100 anchored F∗ samples.
 
 ![Figure 2 — F-neighbor enrichment](visualizations/2026-10-06_compactness-separation/f_neighbor_enrichment_by_checkpoint.png)
 
@@ -102,7 +102,11 @@ $$
 d_{FF}(c,\tau) = \frac{1}{\left|F^{\ast}\right|} \sum_{i \in F^{\ast}} \frac{1}{k} \sum_{j \in \mathrm{NN}_k^{F^{\ast}}(i)} \left\| z_i - z_j \right\|_2
 $$
 
-Mean kNN distance from each anchored F∗ point to other F∗ neighbors.
+$$
+\left|F^{\ast}\right| = 100,\qquad k = 10
+$$
+
+*Plain English:* Here, |F∗| = 100 and k = 10. For each anchored F∗ sample, we find its 10 nearest **other** F∗ samples in PCA-50 space, average those 10 Euclidean distances, and then average that value across all 100 anchored F∗ samples.
 
 $$
 \begin{aligned}
@@ -112,14 +116,10 @@ d_{SF}(c,\tau) &:\ S^{\ast} \rightarrow F^{\ast} \text{ cross distance}
 \end{aligned}
 $$
 
-
-| Metric | Question                      |
-| ------ | ----------------------------- |
-| `d_FF` | compactness among anchored F∗ |
-| `d_SS` | internal baseline among S∗    |
-| `d_FS` | cross F∗ → S∗                 |
-| `d_SF` | cross S∗ → F∗ (asymmetric)    |
-
+- `**d_FF`:** F∗ → F∗ internal kNN distance — lower `d_FF` = F∗ more compact with each other.
+- `**d_SS`:** S∗ → S∗ internal kNN distance — lower `d_SS` = S∗ more compact with each other.
+- `**d_FS`:** F∗ → S∗ cross-kNN distance — directional proximity from anchored F∗ toward S∗.
+- `**d_SF`:** S∗ → F∗ cross-kNN distance — directional proximity from anchored S∗ toward F∗.
 
 ![Figure 3a — d_FF heatmap](visualizations/2026-10-06_compactness-separation/heatmap_d_FF.png)
 
@@ -134,13 +134,23 @@ $$
 
 - **Observation:** at τ=0, `d_SS` keeps rising late while `d_FF` falls — diverging internal geometry.
 
-**Result (τ=0, along c).** `d_FF`: 1000 **4.94** → 20000 **10.02** → 46000 **9.21** (non-monotone, late ↓). `d_SS`: **4.83** → **14.01** → **15.39** (↑). At final: `d_FF` < `d_SS`.
+**Result (τ=0, along *c*).**
+
+
+| Checkpoint *c* | `d_FF` | `d_SS` |
+| -------------- | ------ | ------ |
+| 1000           | 4.94   | 4.83   |
+| 20000          | 10.02  | 14.01  |
+| 46000          | 9.21   | 15.39  |
+
+
+- `**d_FF`:** non-monotone along *c*; late ↓ (46000 vs 20000).
+- `**d_SS`:** rises along *c* (↑).
+- **At *c*=46000:** `d_FF` < `d_SS`.
 
 > **Caution.** Small `d_FF` does not prove a cluster or manifold; see §4 for scale.
 
 ---
-
-
 
 # 4. Is the apparent compactness just global scaling?
 
@@ -155,11 +165,11 @@ $$
 *Plain English:* “How far is a typical sample from its neighbors in the full state space?”
 
 
-| Metric  | Role                                                      |
-| ------- | --------------------------------------------------------- |
-| `d_FF`  | F∗ internal geometry                                      |
-| `d_SS`  | S∗ internal geometry                                      |
-| `d_all` | **overall** 1000-sample neighborhood scale (sanity check) |
+| Metric  | Role                                                              |
+| ------- | ----------------------------------------------------------------- |
+| `d_FF`  | F∗ internal geometry                                              |
+| `d_SS`  | S∗ internal geometry                                              |
+| `d_all` | **overall** 1000-sample neighborhood scale (sanity check)         |
 | `d_M`   | middle-800 query baseline for `R_compact` (ratios use `d_M` only) |
 
 
@@ -170,35 +180,53 @@ $$
 **τ=0 — global scale vs F/S divergence (along c):**
 
 
-| c     | d_FF  | d_SS  | d_all |
-| ----- | ----- | ----- | ----- |
-| 1000  | 4.94  | 4.83  | 4.13  |
-| 20000 | 10.02 | 14.01 | 10.18 |
-| 30000 | 10.24 | 15.07 | 10.61 |
-| 40000 | 9.56  | 15.20 | 10.49 |
-| 46000 | 9.21  | 15.39 | 10.41 |
+| Checkpoint *c* | `d_FF` | `d_SS` | `d_all` | `d_M` |
+| -------------- | ------ | ------ | ------- | ----- |
+| 1000           | 4.94   | 4.83   | 4.13    | 4.13  |
+| 20000          | 10.02  | 14.01  | 10.18   | 10.19 |
+| 30000          | 10.24  | 15.07  | 10.61   | 10.62 |
+| 40000          | 9.56   | 15.20  | 10.49   | 10.51 |
+| 46000          | 9.21   | 15.39  | 10.41   | 10.43 |
 
 
-1k → ~30k: `d_all` **4.13 → 10.61** — **global neighborhood expansion** in mid-training. 30k → 46k: `d_all` **10.61 → 10.41** — **near plateau**. In the same late window: `d_FF` **10.24 → 9.21** (↓), `d_SS` **15.07 → 15.39** (↑). **Early/mid raw distance growth is largely global expansion, but late F∗ tightening vs S∗ expansion is not explained by overall scale alone.**
+**Read by training phase (τ=0)**
 
-`d_all` and `d_M` (τ=0: **4.13, 10.19, 10.62, 10.51, 10.43**) follow **almost the same global-scale trend** — a **consistency check** for middle-baseline normalization. (Definitions differ: `d_all` = 1000 queries, `d_M` = middle 800 queries.)
+
+| Phase       | *c* window | `d_all`       | Reading                           |
+| ----------- | ---------- | ------------- | --------------------------------- |
+| Early → mid | 1k → 30k   | 4.13 → 10.61  | Global neighborhood expansion     |
+| Mid → late  | 30k → 46k  | 10.61 → 10.41 | Near plateau (overall scale flat) |
+
+
+**Same late window (30k → 46k) — F∗ vs S∗ internal geometry**
+
+
+| Metric | *c*=30k | *c*=46k | Trend |
+| ------ | ------- | ------- | ----- |
+| `d_FF` | 10.24   | 9.21    | ↓     |
+| `d_SS` | 15.07   | 15.39   | ↑     |
+
+
+**Takeaway.** Early/mid raw distance growth largely tracks **global expansion** (`d_all` ↑). Late **F∗ tightening vs S∗ expansion** happens while `d_all` is flat — not explained by overall scale alone.
+
+**Consistency check.** `d_all` and `d_M` follow almost the same trend at every *c* (table above). Definitions differ: `d_all` = mean kNN over **all 1000** queries; `d_M` = same statistic over the **middle 800** only (F∗/S∗ excluded) — supports using `d_M` as the middle baseline for `R_compact`.
 
 ---
 
-`R_compact` still uses **`d_M` only** (we do not form a ratio vs `d_all`).
+`R_compact` still uses `**d_M` only** (we do not form a ratio vs `d_all`).
 
 $$
 R_{\mathrm{compact}}(c,\tau) = \frac{d_{FF}(c,\tau)}{d_M(c,\tau)}
 $$
 
-`d_M`: for each **middle 800** sample (excluding F∗, S∗), mean kNN distance with neighbor pool = **full 1000** at the same (c,τ) (self excluded).
+`d_M`: for each middle 800 sample (excluding F∗, S∗), mean kNN distance with neighbor pool = full 1000 at the same (c,τ) (self excluded).
 
 
-| Rcompact | Interpretation                         |
-| -------- | -------------------------------------- |
-| < 1      | F∗ internally tighter than middle      |
-| ≈ 1      | similar local scale                    |
-| > 1      | F∗ more spread than middle             |
+| Rcompact | Interpretation                    |
+| -------- | --------------------------------- |
+| < 1      | F∗ internally tighter than middle |
+| ≈ 1      | similar local scale               |
+| > 1      | F∗ more spread than middle        |
 
 
 ![Figure 4b — R_compact heatmap](visualizations/2026-10-06_compactness-separation/heatmap_ratio_dFF_over_dM.png)
@@ -230,17 +258,17 @@ $$
 d_{\mathrm{PCA}} \in \{20,\,50,\,100\}
 $$
 
-Otherwise identical to the main analysis: **τ=0**, same anchored F∗, same middle-baseline `d_M`, **k=10**, Euclidean distance, same checkpoints, same PCA fitting (fit on all 10k at τ=0, apply to every c). Same metric \(R_{\mathrm{compact}} = d_{FF}/d_M\).
+Otherwise identical to the main analysis: **τ=0**, same anchored F∗, same middle-baseline `d_M`, **k=10**, Euclidean distance, same checkpoints, same PCA fitting (fit on all 10k at τ=0, apply to every c). Same metric R_{\mathrm{compact}} = d_{FF}/d_M.
 
 **τ=0 — `R_compact` by PCA dimension:**
 
 
-| c | PCA-20 | PCA-50 | PCA-100 |
-| ----- | -----: | -----: | ------: |
-| 1000 | 1.265 | 1.196 | 1.164 |
-| 20000 | 1.023 | 0.983 | 0.969 |
-| 30000 | 0.998 | 0.964 | 0.952 |
-| 40000 | 0.940 | 0.910 | 0.903 |
+| c     | PCA-20    | PCA-50    | PCA-100   |
+| ----- | --------- | --------- | --------- |
+| 1000  | 1.265     | 1.196     | 1.164     |
+| 20000 | 1.023     | 0.983     | 0.969     |
+| 30000 | 0.998     | 0.964     | 0.952     |
+| 40000 | 0.940     | 0.910     | 0.903     |
 | 46000 | **0.913** | **0.884** | **0.881** |
 
 
@@ -255,8 +283,6 @@ Otherwise identical to the main analysis: **τ=0**, same anchored F∗, same mid
 Exact values vary with PCA dimension, but the **qualitative conclusion is unchanged**: anchored F∗ become **relatively more compact vs middle** late in training. The observed late compactness trend does **not** look like an artifact of choosing PCA-50 specifically (we only checked 20 / 50 / 100; we do not claim dimension-independence). The §4 late relative-compactness conclusion is **further supported** after the global baseline and this representation sanity check.
 
 ---
-
-
 
 # 5. Are F∗ relatively separated from S∗?
 
@@ -295,30 +321,28 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 **τ=0 — cross distance asymmetry (Δ = d_SF − d_FS):**
 
-| c | d_FS | d_SF | Δ |
-|---|-----:|-----:|--:|
-| 1000 | 4.88 | 4.87 | −0.01 |
+
+| c     | d_FS  | d_SF  | Δ     |
+| ----- | ----- | ----- | ----- |
+| 1000  | 4.88  | 4.87  | −0.01 |
 | 20000 | 11.86 | 13.13 | +1.27 |
 | 30000 | 12.35 | 14.33 | +1.98 |
 | 40000 | 11.88 | 14.40 | +2.53 |
 | 46000 | 11.97 | 14.46 | +2.49 |
 
+
 ---
-
-
 
 ## Compactness vs Separation
 
 
-| Question                         | Result                                              |
-| -------------------------------- | --------------------------------------------------- |
-| Do F∗ become relatively compact? | **Yes — late training** (τ=0, `R_compact` down)     |
-| Clean separation of F∗ and S∗?   | **No clear evidence** (`R_sep` < 1, downward trend) |
-| Only global scaling?             | **Unlikely** — late `d_all` plateau but `d_FF` ↓, `d_SS` ↑ |
+| Question                         | Result                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Do F∗ become relatively compact? | **Yes — late training** (τ=0, `R_compact` down)                                                   |
+| Clean separation of F∗ and S∗?   | **No clear evidence** (`R_sep` < 1, downward trend)                                               |
+| Only global scaling?             | **Unlikely** — late `d_all` plateau but `d_FF` ↓, `d_SS` ↑                                        |
 | Sensitive to PCA-50 choice?      | **No clear sign** — late `R_compact` decrease preserved at PCA-20/50/100 (not specific to PCA-50) |
-| One discrete F manifold?         | **Not established**                                 |
-
-
+| One discrete F manifold?         | **Not established**                                                                               |
 
 
 ### Final snapshot (c=46000, τ=0)
@@ -338,8 +362,6 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 ---
 
-
-
 # 6. What does the combined temporal + spatial picture say?
 
 **Early training:** unstable F identity (`R_F` low); similar F/S distances and ratios (`R_compact` ≈ 1.2 early, `R_sep` ≈ 1).
@@ -358,8 +380,6 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 ---
 
-
-
 # 7. What can we claim — and what can we not claim?
 
 **Can claim (within data and definitions).**
@@ -376,8 +396,6 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 ---
 
-
-
 ## Conclusion
 
 1. Final high-disagreement identity becomes **increasingly persistent** late in training and late denoising.
@@ -386,24 +404,21 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 ---
 
-
-
 ## Appendix — figures
 
 
-| Item | Path |
-| ---- | ---- |
-| Figure 1 — retention | `visualizations/2026-10-06_compactness-separation/heatmap_baseline_max_F.png` |
-| Figure 2 — enrichment | `visualizations/2026-10-06_compactness-separation/f_neighbor_enrichment_by_checkpoint.png` |
-| Figure 3a — d_FF | `visualizations/2026-10-06_compactness-separation/heatmap_d_FF.png` |
-| Figure 3b — d_SS | `visualizations/2026-10-06_compactness-separation/heatmap_d_SS.png` |
-| Figure 4a — d_all | `visualizations/2026-10-06_compactness-separation/heatmap_d_all.png` |
-| Figure 4b — R_compact | `visualizations/2026-10-06_compactness-separation/heatmap_ratio_dFF_over_dM.png` |
-| Figure 4c — PCA robustness | `visualizations/2026-10-06_compactness-separation/tau0_Rcompact_by_pca.png` |
-| Figure 5 — R_sep | `visualizations/2026-10-06_compactness-separation/heatmap_ratio_dFS_over_dSS.png` |
-| Figure 6 — UMAP | `visualizations/2026-10-06_compactness-separation/umap_tau0_checkpoints.png` |
-| Prior report | [`2026-10-01_identity-retention.md`](2026-10-01_identity-retention.md) |
+| Item                       | Path                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| Figure 1 — retention       | `visualizations/2026-10-06_compactness-separation/heatmap_baseline_max_F.png`              |
+| Figure 2 — enrichment      | `visualizations/2026-10-06_compactness-separation/f_neighbor_enrichment_by_checkpoint.png` |
+| Figure 3a — d_FF           | `visualizations/2026-10-06_compactness-separation/heatmap_d_FF.png`                        |
+| Figure 3b — d_SS           | `visualizations/2026-10-06_compactness-separation/heatmap_d_SS.png`                        |
+| Figure 4a — d_all          | `visualizations/2026-10-06_compactness-separation/heatmap_d_all.png`                       |
+| Figure 4b — R_compact      | `visualizations/2026-10-06_compactness-separation/heatmap_ratio_dFF_over_dM.png`           |
+| Figure 4c — PCA robustness | `visualizations/2026-10-06_compactness-separation/tau0_Rcompact_by_pca.png`                |
+| Figure 5 — R_sep           | `visualizations/2026-10-06_compactness-separation/heatmap_ratio_dFS_over_dSS.png`          |
+| Figure 6 — UMAP            | `visualizations/2026-10-06_compactness-separation/umap_tau0_checkpoints.png`               |
+| Prior report               | `[2026-10-01_identity-retention.md](2026-10-01_identity-retention.md)`                     |
 
 
-*Generated continuation report; does not modify* [`2026-10-01_identity-retention.md`](2026-10-01_identity-retention.md).
-
+*Generated continuation report; does not modify* `[2026-10-01_identity-retention.md](2026-10-01_identity-retention.md)`.
