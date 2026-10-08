@@ -31,6 +31,8 @@
 
 ---
 
+
+
 # 1. What did the previous report establish?
 
 **Temporal.** We fixed **100** final F∗ ids and measured retention `R_F`: overlap with the **top-10% set recomputed from 1000 scores at each** (c,τ). Early (c=1000, τ=0): `R_F` ≈ 0.06. Late: `R_F` ≈ 0.81 at c=40000, τ=0.
@@ -40,6 +42,8 @@
 **Unresolved limitation.** `E_F` answers label over-representation, not geometric compactness or F∗/S∗ separation → motivates distance analysis below.
 
 ---
+
+
 
 # 2. When does final disagreement identity stabilize?
 
@@ -70,6 +74,8 @@ $$
 > **Caution.** Retention is label overlap, not embedding distance.
 
 ---
+
+
 
 # 3. Does local enrichment mean F∗ is actually compact?
 
@@ -151,6 +157,8 @@ $$
 > **Caution.** Small `d_FF` does not prove a cluster or manifold; see §4 for scale.
 
 ---
+
+
 
 # 4. Is the apparent compactness just global scaling?
 
@@ -258,9 +266,9 @@ $$
 d_{\mathrm{PCA}} \in \{20,\,50,\,100\}
 $$
 
-Otherwise identical to the main analysis: **τ=0**, same anchored F∗, same middle-baseline `d_M`, **k=10**, Euclidean distance, same checkpoints, same PCA fitting (fit on all 10k at τ=0, apply to every c). Same metric R_{\mathrm{compact}} = d_{FF}/d_M.
+Otherwise identical to the main analysis: **τ=0**, same anchored F∗, same middle-baseline `d_M`, **k=10**, Euclidean distance, same checkpoints, same PCA fitting (fit on all 10k at τ=0, apply to every c). Same metric: `R_compact` = `d_FF` / `d_M`.
 
-**τ=0 — `R_compact` by PCA dimension:**
+**τ=0 —** `R_compact` **by PCA dimension:**
 
 
 | c     | PCA-20    | PCA-50    | PCA-100   |
@@ -272,8 +280,8 @@ Otherwise identical to the main analysis: **τ=0**, same anchored F∗, same mid
 | 46000 | **0.913** | **0.884** | **0.881** |
 
 
-- All three PCA dimensions show **late-training `R_compact` decrease** (same direction 20k → 46k).
-- At **46k, all three have `R_compact` < 1** (`R_compact` = 1 is the middle-baseline reference).
+- All three PCA dimensions show **late-training** `R_compact` **decrease** (same direction 20k → 46k).
+- At **46k, all three have** `R_compact` **< 1** (`R_compact` = 1 is the middle-baseline reference).
 - The **PCA-50** column **matches exactly** existing `matrix_ratio_dFF_over_dM.csv` (τ=0) — pipeline consistency.
 
 ![Figure 4c — PCA-dimension robustness of R_compact (τ=0)](visualizations/2026-10-06_compactness-separation/tau0_Rcompact_by_pca.png)
@@ -283,6 +291,8 @@ Otherwise identical to the main analysis: **τ=0**, same anchored F∗, same mid
 Exact values vary with PCA dimension, but the **qualitative conclusion is unchanged**: anchored F∗ become **relatively more compact vs middle** late in training. The observed late compactness trend does **not** look like an artifact of choosing PCA-50 specifically (we only checked 20 / 50 / 100; we do not claim dimension-independence). The §4 late relative-compactness conclusion is **further supported** after the global baseline and this representation sanity check.
 
 ---
+
+
 
 # 5. Are F∗ relatively separated from S∗?
 
@@ -333,6 +343,8 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 ---
 
+
+
 ## Compactness vs Separation
 
 
@@ -343,6 +355,8 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 | Only global scaling?             | **Unlikely** — late `d_all` plateau but `d_FF` ↓, `d_SS` ↑                                        |
 | Sensitive to PCA-50 choice?      | **No clear sign** — late `R_compact` decrease preserved at PCA-20/50/100 (not specific to PCA-50) |
 | One discrete F manifold?         | **Not established**                                                                               |
+
+
 
 
 ### Final snapshot (c=46000, τ=0)
@@ -362,6 +376,8 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 ---
 
+
+
 # 6. What does the combined temporal + spatial picture say?
 
 **Early training:** unstable F identity (`R_F` low); similar F/S distances and ratios (`R_compact` ≈ 1.2 early, `R_sep` ≈ 1).
@@ -380,6 +396,8 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 ---
 
+
+
 # 7. What can we claim — and what can we not claim?
 
 **Can claim (within data and definitions).**
@@ -396,6 +414,8 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 
 ---
 
+
+
 ## Conclusion
 
 1. Final high-disagreement identity becomes **increasingly persistent** late in training and late denoising.
@@ -403,6 +423,8 @@ Cross-kNN distance is **directional**, so `d_FS` and `d_SF` need not be equal. A
 3. That compactness does **not** coincide with increasing **clean F–S separation** — **partial local organization** rather than one isolated failure manifold.
 
 ---
+
+
 
 ## Appendix — figures
 
