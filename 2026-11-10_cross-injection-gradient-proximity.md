@@ -61,7 +61,7 @@ Gradients for One-Step are evaluated at the **next DDIM index** after injection 
 ### A. Random-projected gradient feature
 
 $$
-z_i = \operatorname{vec}(\epsilon_\theta(x_i,t)), \qquad
+z_i = \mathrm{vec}(\epsilon_\theta(x_i,t)), \qquad
 s_{i,k} = r_k^\top z_i, \qquad
 g_{i,k} = \nabla_{\theta_{\mathrm{mid}}} s_{i,k}, \qquad
 G_i = [g_{i,1};\ldots;g_{i,K}]
