@@ -1,7 +1,5 @@
 # FMNIST split cross-injection — Gradient proximity (corrected sampling, ckpt 46k)
 
-> **Correction note.** An earlier report used Phase 3 runs where `denoise_until_tau_before_step()` skipped DDIM steps when `t > τ`, so `x_τ^A` was still initial noise. That invalidates all cross-injection neighborhoods from those runs. **This document is the final analysis** after the sampling fix (`sampling_fix_audit_ckpt46000`, `all_pass: true`), **Corrected Phase 3** (`full_ckpt46000_phase3_corrected_20261110`), and **Phase 4** (`full_ckpt46000_phase4_proj2_20261110`). All numeric tables below are extracted from Phase 4 `tau_report.json` per projection set.
-
 **Scope:** Model A/B class-split unconditional diffusion; shared `x_τ^A` from Model A; injection τ ∈ {800, 600, 400, 200}; mid-block random-projected gradient neighborhoods (N = 100 noise IDs 0–99).  
 **Primary source:** `experiments/fmnist_split_cross_injection/full_ckpt46000_phase4_proj2_20261110/merged_report.json` (`validation: ok`). Set 0 (seed 20261109) matches Corrected Phase 3.
 
