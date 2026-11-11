@@ -53,10 +53,10 @@ Phase 4 repeats all gradient metrics under **two projection sets** (seeds 202611
 Let ε<sub>θ</sub>(x, t) be the U-Net noise prediction. With output dimension 1024 (= 1×32×32 channels flattened):
 
 $$
-z_\theta(x,t)=\operatorname{vec}(\epsilon_\theta(x,t)), \qquad
+z_\theta(x,t)=\mathrm{vec}(\epsilon_\theta(x,t)), \qquad
 s_k=r_k^\top z_\theta(x,t), \qquad
 g_k=\nabla_{\theta_{\mathrm{mid}}}s_k, \qquad
-G_i=\operatorname{concat}(g_1,\ldots,g_{32})
+G_i=\mathrm{concat}(g_1,\ldots,g_{32})
 $$
 
 Each r<sub>k</sub> ∈ ℝ<sup>1024</sup> is a fixed unit vector drawn from the projection seed; the bank is shared across all anchors and cases within a projection set. Pairwise similarities:
