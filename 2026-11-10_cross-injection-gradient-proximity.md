@@ -102,7 +102,7 @@ $$
 s=\sqrt{\frac{(x_0-\mu)^2+(x_1-\mu)^2}{n-1}}, \; n=2
 $$
 
-Verified: recomputed $(\mu,s)$ for rank/cosine NDCG@10 matches `merged_report.json` (`validate_phase4_report_data.py`, 0 mismatches).
+**Statistics check:** All §5.3 table values $(\mu,s)$ are recomputed from per-set `tau_report.json` (96 cells = 4 cases × 4 τ × 6 metrics). Rank/cosine NDCG@10 and top-10 overlap means/stds additionally match `merged_report.json` (`validate_phase4_report_data.py`). NDCG@5 and top-5 overlap are not stored in `merged_report.json`; only the per-set source + $(\mu,s)$ recomputation applies.
 
 ---
 
@@ -366,7 +366,7 @@ Interpretation: **exploratory reproducibility across two projection seeds**—qu
 
 ### Switching effect ($\Delta_{\mathrm{switch}}$, not $\Delta_{\mathrm{proj}}$)
 
-One-Step rank $\Delta_{\mathrm{switch}}$ (μ): **0.315** (τ = 600) > 0.258 (800) > 0.231 (400) > 0.216 (200). Between seeds, One-Step gaps differ by up to ~0.013 in absolute **signed** components (e.g. τ = 800: Set 0 gap 0.252, Set 1 gap 0.265)—compare using the switching table in §5.3, not interchanging with $|\mathrm{NDCG}_{\mathrm{Set0}}-\mathrm{NDCG}_{\mathrm{Set1}}|$ on a single case.
+One-Step rank $\Delta_{\mathrm{switch}}$ (μ): **0.315** (τ = 600) > 0.258 (800) > 0.231 (400) > 0.216 (200). **Across projection sets**, the One-Step switching gap (same metric, rank NDCG@10, A→A − A→B) differs by at most **0.0172** (τ = 200; Set 0 = 0.2245, Set 1 = 0.2073). At τ = 800 the set-to-set difference is **0.0130** (0.2649 − 0.2519). This is **not** projection sensitivity $\Delta_{\mathrm{proj}}$ on a single case; see the switching table in §5.3 vs the $\Delta_{\mathrm{proj}}$ table above it.
 
 **Classifier (full, Set 0, mean P(split-A group)):** A→A ≈ 67%; A→B ≈ 18% / 22% / 34% / 50% at τ 800 / 600 / 400 / 200 (auxiliary).
 
@@ -390,4 +390,4 @@ After corrected DDIM-until-τ sampling, cross-injection gradient neighborhoods a
 
 *Raw assets:* `full_ckpt46000_phase4_proj2_20261110/` (`merged_report.json`, `tau_*/projection_set_*/tau_report.json`, `sampling_shared/`). Corrected Phase 3 parity for Set 0. No training reruns.*
 
-*Figure build:* `experiments/fmnist_split_cross_injection/report_assets/build_corrected_phase4_report_figures.py`.*
+*Figure build:* `build_corrected_phase4_report_figures.py`. *Audit (read-only):* `validate_phase4_report_data.py`, `audit_report_figures.py` — last run 2026-11-10, merged cross-check 0 failures, Fig 1–5 present and consistent with JSON.*
