@@ -1,185 +1,252 @@
-# FMNIST split cross-injection — Gradient proximity (Phase 3, ckpt 46k)
+# FMNIST split cross-injection — Gradient proximity (corrected sampling, ckpt 46k)
 
-**Scope:** Model A/B class-split unconditional diffusion; cross-injection at τ = 800, 600, 400, 200; mid-block random-projected gradient neighborhoods (N=100 fixed noise IDs).  
-**Source of truth:** `experiments/fmnist_split_cross_injection/full_ckpt46000_phase3_20261110/merged_report.json` (merged 2026-11-10).
+> **Correction note.** An earlier report used Phase 3 runs where `denoise_until_tau_before_step()` skipped DDIM steps when `t > τ`, so `x_τ^A` was still initial noise. That invalidates all cross-injection neighborhoods from those runs. **This document is the final analysis** after the sampling fix (`sampling_fix_audit_ckpt46000`, `all_pass: true`), **Corrected Phase 3** (`full_ckpt46000_phase3_corrected_20261110`), and **Phase 4** with two independent projection banks (`full_ckpt46000_phase4_proj2_20261110`). Metrics below come only from those roots.
 
-**Notation (prose):** `x_τ^A` = Model-A latent immediately **before** the DDIM update at injection τ; τ′ = next scheduler index after τ (`tau_prime_after_one_step`). Display equations below use `$$ … $$` only.
+**Scope:** Model A/B class-split unconditional diffusion; shared `x_τ^A` from Model A; injection τ ∈ {800, 600, 400, 200}; mid-block random-projected gradient neighborhoods (N = 100 noise IDs 0–99).  
+**Primary source:** `experiments/fmnist_split_cross_injection/full_ckpt46000_phase4_proj2_20261110/merged_report.json` (`validation: ok`). Phase 3 Set 0 (seed 20261109) matches Corrected Phase 3 for parity.
+
+**Notation:** `x_τ^A` = Model-A latent immediately **before** the DDIM update at injection τ; τ′ = next scheduler index (799, 599, 399, 199). Display math uses `$$ … $$`.
 
 ---
 
-## 1. Research Question
+## 1. Overview
 
-When we denoise the same intermediate state `x_τ^A` (reached with Model A) but apply Model B instead of A for subsequent sampling, does the **gradient neighborhood** of each noise anchor—ranking of peers by projected mid-block sensitivity—remain aligned with the reference ranking computed at `x_τ^A` under Model A?
+We ask whether **gradient neighborhoods**—peer rankings induced by projected mid-block sensitivities—stay aligned with a reference computed at `x_τ^A` under Model A when subsequent denoising uses Model B.
 
-We expect **A→A One-Step** to preserve neighborhoods almost perfectly because a single DDIM step stays on the A manifold. **A→B One-Step** tests immediate cross-model sensitivity. **Full denoising** probes whether rank structure survives to the final image when gradients are evaluated at **t = 0** on the completed sample (a post-sampling probe, not the gradient of the last DDIM update).
+| Case | Model at probe | Gradient timestep |
+| --- | --- | --- |
+| Reference | A | τ |
+| A→A One-Step | A | τ′ |
+| A→B One-Step | B | τ′ |
+| A→A Full | A | **t = 0** on final image |
+| A→B Full | B | **t = 0** on final image |
+
+**One-Step A→A** should preserve neighborhoods (single in-model DDIM step). **A→B One-Step** stress-tests immediate cross-model sensitivity. **Full** cases evaluate features at the **clean endpoint** (output probe at t = 0), not the autograd Jacobian inside the last DDIM `scheduler.step`.
+
+Phase 4 repeats all gradient metrics under **two projection sets** (seeds 20261109 / 20261110, K = 32 each) while **reusing** the same DDIM latents (`sampling_shared/`).
 
 ---
 
 ## 2. Experimental Setup
 
-
 | Setting | Value |
 | -------- | ----- |
 | Data | FashionMNIST 32×32 grayscale, unconditional |
-| Model A classes | 0, 2, 3, 4, 6 (T-shirt/top, Pullover, Dress, Coat, Shirt) |
-| Model B classes | 1, 5, 7, 8, 9 (Trouser, Sandal, Sneaker, Bag, Ankle boot) |
-| Architecture | Shared `UNet2DModel` config: [64, 128, 256] channels, prediction type ε, DDPM linear schedule, 1000 train steps |
-| Initialization | **Identical weights** at step 0: Model B loads `outputs/fmnist_split_shared/init_seed0` before split training (`configs/fmnist_split_training.yaml`, `training.seed: 0`) |
-| Training | Separate fine-tuning on 30k images per split to **EMA step 46000** (runs `fmnist_splitA_seed0_*`, `fmnist_splitB_seed0_*`) |
-| Sampling | DDIM, η = 0, 1000 timesteps; injection at scheduler-listed τ |
-| Noise anchors | Fixed pool IDs **0–99** (`fixed_noise_1000.pt`) |
-| Injection τ | 800, 600, 400, 200 (τ=400 reused from Phase 2 symlink) |
-| Gradients | **Mid block only**; K = 32 random projections, `projection_seed=20261109` |
-| Metrics | Rank-graded NDCG@5/@10, top-k overlap, random baseline (50 draws, seed 20261109) |
-| Classifier | CPU ONNX (`fashionmnist_tsilva`) on **full** outputs only (auxiliary) |
+| Model A classes | 0, 2, 3, 4, 6 |
+| Model B classes | 1, 5, 7, 8, 9 |
+| Split size | 30,000 images per model |
+| Init / training | Same initial weights; independent fine-tuning to **EMA step 46000** |
+| Sampling | DDIM, η = 0, 1000 train timesteps |
+| Noise anchors | Fixed IDs **0–99** (`fixed_noise_1000.pt`) |
+| Injection τ | 800, 600, 400, 200 |
+| Projections | **Set 0:** seed 20261109; **Set 1:** seed 20261110; K = 32 directions each |
+| Gradients | **U-Net mid block only**; weights frozen except mid block for `autograd.grad` |
+| Metrics | Rank- and cosine-grade NDCG@5/@10, top-k overlap, random baseline (50 permutations, seed 20261109) |
+| Classifier | ONNX on **full** outputs only (predicted labels; auxiliary) |
+
+**Sampling validation (post-fix):** Independent DDIM trajectory max diff = **0**; τ-wise step counts match; A→A and A→B One-Step share identical `x_τ^A`; model `state_dict` unchanged across cases.
 
 ---
 
-## 3. Experimental Design
+## 3. Gradient Proximity
+
+Let ε<sub>θ</sub>(x, t) be the U-Net noise prediction. With output dimension 1024 (= 1×32×32 channels flattened):
+
+$$
+z_\theta(x,t)=\operatorname{vec}(\epsilon_\theta(x,t)), \qquad
+s_k=r_k^\top z_\theta(x,t), \qquad
+g_k=\nabla_{\theta_{\mathrm{mid}}}s_k, \qquad
+G_i=\operatorname{concat}(g_1,\ldots,g_{32})
+$$
+
+Each r<sub>k</sub> ∈ ℝ<sup>1024</sup> is a fixed unit vector drawn from the projection seed; the bank is shared across all anchors and cases within a projection set. Pairwise similarities:
+
+$$
+S_{ij}=\frac{G_i^\top G_j}{\|G_i\|_2\|G_j\|_2}
+$$
+
+**Implementation (`gradient_proximity.py`):** Only mid-block parameters receive `requires_grad`; scalars s<sub>k</sub> are backpropped via `torch.autograd.grad` without updating weights. Concatenated dimension **|G<sub>i</sub>| = 88,244,224** (32 × mid-block parameter count, verified in `tau_report.json`).
+
+**Rankings:** For each anchor i, neighbors are sorted by test-case S<sub>ij</sub> (self excluded). The **reference** ranking uses Model A gradients at (`x_τ^A`)<sub>i</sub>, τ.
+
+### NDCG@k
+
+$$
+\mathrm{DCG}_k=\sum_{r=1}^{k}\frac{\mathrm{rel}(j_r)}{\log_2(r+1)}, \qquad
+\mathrm{NDCG}_k=\frac{\mathrm{DCG}_k}{\mathrm{IDCG}_k}
+$$
+
+- **Rank-grade:** Reference top-k neighbors get grades k, k−1, …, 1; others 0 (`rank_grade_relevance`).
+- **Cosine-grade:** Relevance of neighbor j is **(S<sup>ref</sup><sub>ij</sub> + 1) / 2**—continuous, so NDCG stays high even when test order reshuffles (`cosine_grade_relevance`).
+
+Test order always follows the **case** similarity matrix; relevance always follows the **reference** matrix (same UNet per case for building G<sub>i</sub>; we compare rankings, not cross-model raw features).
+
+### Top-k overlap
+
+$$
+\mathrm{Overlap}_k=\frac{|N_k^{\mathrm{ref}}(i)\cap N_k^{\mathrm{case}}(i)|}{k}
+$$
+
+### Switching gap (descriptive)
+
+$$
+\Delta_{\mathrm{switch}}(\tau)=\mathrm{NDCG}_{A\to A}(\tau)-\mathrm{NDCG}_{A\to B}(\tau)
+$$
+
+(computed on rank or cosine grade; One-Step or Full as noted).
+
+---
+
+## 4. Experimental Design
 
 ![Experiment flow](visualizations/2026-11-10_cross-injection-gradient-proximity/fig0_experiment_flow.png)
 
-**Figure 0.** Shared pipeline: fixed ε<sub>i</sub> → Model A denoise until **pre-step** state at injection τ → `x_τ^A`.
+**Figure 0.** Fixed ε<sub>i</sub> → Model A DDIM to pre-step state at τ → `x_τ^A` → parallel branches (reference @ τ; One-Step @ τ′; Full through t = 0 @ t = 0 probe).
 
-**Reference (per anchor i):** Gradient features at timestep τ on (`x_τ^A`)<sub>i</sub> with Model A; pairwise cosines `S_ij` induce the reference neighbor ranking.
+```
+Fixed epsilon
+     |
+     v
+Model A DDIM denoising
+     |
+     v
+x_tau_A
+     |
+     +------ Reference: Model A @ tau
+     |
+     +------ A -> A: One DDIM step
+     |
+     +------ A -> B: One DDIM step
+     |
+     +------ A -> A: Full denoising
+     |
+     +------ A -> B: Full denoising
+```
 
-**One-Step cases** (from the same `x_τ^A`):
-
-- **A→A:** one `ddim_one_step` with Model A at τ.
-- **A→B:** one step with Model B at τ.
-
-Gradients for One-Step are evaluated at the **next DDIM index** after injection τ (denoted τ′ in code: `tau_prime_after_one_step`)—not always τ − 1. Measured τ′ values: **799, 599, 399, 199** for injections 800, 600, 400, 200 (`align_injection_tau` in `sampling.py`).
-
-**Full-Denoising cases:** From `x_τ^A`, run DDIM with Model A or B through **t = 0**. Gradient neighborhoods use **t = 0** on the final `x_0` image with the corresponding UNet. This is an **output sensitivity probe at the clean endpoint**, not the autograd signal inside the last DDIM `scheduler.step` call (`experiment_core.py`: `gradient_timestep: 0`, note *"x after DDIM step at t=0"*).
-
-**Cross-model rule:** Reference and test similarities always use gradients from the **same** UNet when building each case’s `G_i`; we compare **test** rankings to the **reference** ranking, never raw cross-model gradient vectors.
-
----
-
-## 4. Mathematical Definitions
-
-### A. Random-projected gradient feature
-
-$$
-z_i = \mathrm{vec}(\epsilon_\theta(x_i,t)), \qquad
-s_{i,k} = r_k^\top z_i, \qquad
-g_{i,k} = \nabla_{\theta_{\mathrm{mid}}} s_{i,k}, \qquad
-G_i = [g_{i,1};\ldots;g_{i,K}]
-$$
-
-Here K = 32, directions r<sub>k</sub> are fixed unit vectors in ℝ<sup>1024</sup> (seed 20261109), and θ<sub>mid</sub> are **mid block** parameters only (`gradient_proximity.py`).
-
-### B. Gradient cosine similarity
-
-$$
-S_{ij} = \frac{G_i^\top G_j}{\lVert G_i\rVert_2 \lVert G_j\rVert_2}
-$$
-
-Within each case, `S_ij` ranks neighbors for anchor i (self excluded). Reference rankings come from Model A at `x_τ^A`; test rankings from the case-specific states and UNet.
-
-### C. Rank-graded NDCG@k
-
-$$
-\mathrm{DCG}_k = \sum_{r=1}^{k} \frac{\mathrm{rel}(j_r)}{\log_2(r+1)}, \qquad
-\mathrm{NDCG}_k = \frac{\mathrm{DCG}_k}{\mathrm{IDCG}_k}
-$$
-
-**Relevance:** For rank-grade mode, the reference’s top-k neighbors receive grades k, k − 1, …, 1; all others receive 0 (`rank_grade_relevance` in `neighborhood_metrics.py`). Test order is by test-case cosine `S_ij`.
-
-### D. Top-k overlap
-
-$$
-\mathrm{Overlap}_k = \frac{|N_k^{\mathrm{ref}}(i) \cap N_k^{\mathrm{case}}(i)|}{k}
-$$
-
-### E. Switching gap (One-Step)
-
-$$
-\Delta_{\text{switch}}(\tau) = \mathrm{NDCG}_{A \to A}^{\text{one}}(\tau) - \mathrm{NDCG}_{A \to B}^{\text{one}}(\tau)
-$$
-
-Larger Δ<sub>switch</sub> means A→B preserves the reference ranking **less** than A→A at the same τ (descriptive contrast, not a causal decomposition of model swap effects).
+Phase 4: for each τ, **one** shared sampling artifact tree; gradient passes differ only by projection bank (Set 0 vs Set 1).
 
 ---
 
 ## 5. Results
 
-### Summary table (rank-graded NDCG@10 means)
+Random baseline (rank NDCG@10) ≈ **0.083–0.084** per τ. Below, **μ ± s** is the mean and sample std across **n = 2** projection sets (s = |v<sub>0</sub> − v<sub>1</sub>| / √2 from `merged_report.json`).
 
+### 5.1 Rank NDCG@10 (primary)
 
-| τ | A→A One | A→B One | Δ_switch | A→A Full | A→B Full |
+| τ | A→A One | A→B One | Δ<sub>switch</sub> | A→A Full | A→B Full |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 800 | 0.9961 | 0.7377 | 0.258 | 0.2634 | 0.2632 |
+| 600 | 0.9989 | 0.6839 | 0.315 | 0.3957 | 0.3461 |
+| 400 | 0.9990 | 0.7686 | 0.230 | 0.4968 | 0.4611 |
+| 200 | 0.9991 | 0.7832 | 0.216 | 0.5687 | 0.5489 |
+
+(μ columns match `combined_tau.*.per_case.*.rank_ndcg10_mean`; Δ from One-Step means.)
+
+![Figure 1](visualizations/2026-11-10_cross-injection-gradient-proximity/fig1_one_step_ndcg10.png)
+
+**Figure 1.** One-Step **rank** NDCG@10 vs τ; solid = Set 0, dashed = Set 1. A→A ≈ 1.0; A→B **lowest at τ = 600** (~0.684 mean).
+
+![Figure 2](visualizations/2026-11-10_cross-injection-gradient-proximity/fig2_cosine_ndcg10_one_step.png)
+
+**Figure 2.** One-Step **cosine** NDCG@10 (set mean). A→A and A→B remain > 0.98; rank-grade (Figure 1) is the stricter discriminator.
+
+![Figure 3](visualizations/2026-11-10_cross-injection-gradient-proximity/fig3_full_ndcg10.png)
+
+**Figure 3.** Full-denoising rank NDCG@10 (t = 0 probe). Values rise from τ = 800 toward τ = 200 but stay well below One-Step A→A.
+
+### 5.2 Cosine NDCG, overlap, and multi-metric snapshot (τ = 600)
+
+Rank-grade highlights the τ = 600 One-Step dip; cosine-grade and overlap move in the same direction but with smaller dynamic range.
+
+| Case | Rank @5 μ | Rank @10 μ | Cos @10 μ | Top-5 μ | Top-10 μ |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 800 | 0.999 | 0.522 | **0.476** | 0.202 | 0.174 |
-| 600 | 0.999 | 0.342 | **0.657** | 0.337 | 0.211 |
-| 400 | 0.998 | 0.497 | **0.501** | 0.204 | 0.177 |
-| 200 | 0.998 | 0.473 | **0.525** | 0.213 | 0.202 |
+| A→A One | 0.9989 | 0.9989 | 1.0000 | 0.999 | 0.994 |
+| A→B One | 0.5924 | 0.6839 | 0.9817 | 0.529 | 0.605 |
+| A→A Full | 0.2701 | 0.3957 | 0.9535 | 0.293 | 0.392 |
+| A→B Full | 0.2352 | 0.3461 | 0.9445 | 0.252 | 0.336 |
 
-Random baseline (rank NDCG@10) is ≈ 0.082–0.084 per τ (reported inside each case).
+![Figure 4](visualizations/2026-11-10_cross-injection-gradient-proximity/fig4_ndcg_vs_overlap.png)
 
-![Figure 1 — One-Step NDCG@10](visualizations/2026-11-10_cross-injection-gradient-proximity/fig1_one_step_ndcg10.png)
+**Figure 4.** One-Step rank NDCG@10 (left) vs top-10 overlap (right), set means. A→B drop at τ = 600 co-occurs with overlap drop (~0.61 vs ~0.68 at τ = 800).
 
-**Figure 1.** One-Step mean rank NDCG@10 vs injection τ (800→200, toward completion). Shaded bars: **95% bootstrap CI** over 100 anchors (2000 resamples). A→A stays near 1.0; A→B sits far below A→A and above the random baseline. **Observation:** cross-model one-step disruption is large at every τ; the **lowest** A→B One value occurs at **τ=600** (0.342 mean), not at the earliest τ.
+![Figure 5](visualizations/2026-11-10_cross-injection-gradient-proximity/fig5_one_vs_full_ndcg10.png)
 
-![Figure 2 — Switching gap](visualizations/2026-11-10_cross-injection-gradient-proximity/fig2_switching_gap.png)
+**Figure 5.** One-Step vs Full **rank** NDCG@10 for A→A and A→B separately. Full ranks increase with later injection (smaller τ) but remain below One-Step A→A.
 
-**Figure 2.** Δ<sub>switch</sub> peaks at **τ=600** (0.657); τ=800 is the **smallest** gap among the four (0.476). This is **not** monotonic in “early vs late” denoising.
-
-![Figure 3 — Full NDCG@10](visualizations/2026-11-10_cross-injection-gradient-proximity/fig3_full_ndcg10.png)
-
-**Figure 3.** Full-denoising rank NDCG@10 with the same Y-axis span as Figure 1. Final **t = 0** probes cluster well above random but **far below** One-Step A→A. A→A Full is highest at **τ=600** (0.337); A→A and A→B Full track each other closely (both ≲ 0.21 at τ=800/400/200).
-
-![Figure 4 — NDCG vs overlap](visualizations/2026-11-10_cross-injection-gradient-proximity/fig4_ndcg_vs_overlap.png)
-
-**Figure 4 (supplementary).** One-Step rank NDCG@10 (left) and top-10 overlap (right) share the same τ ordering. **Observation:** when A→B NDCG drops (τ=600), overlap drops correspondingly (A→B top-10 mean 0.318 vs 0.482 at τ=800).
-
-**Cosine-grade NDCG@10 (not plotted):** A→A One ≈ 0.94–1.0; A→B One ≈ 0.94–0.99—much higher than rank-grade—because cosine magnitudes compress relevance; rank-grade is the stricter neighborhood test emphasized here.
+Full metric tables for all τ (Set 0 / Set 1 / μ ± s) are in `merged_report.json` → `combined_tau`.
 
 ---
 
-## 6. Secondary Validation
+## 6. Projection Stability
 
-**Classifier** (predicted labels, not ground truth): fraction of samples assigned to split-defined class groups on **full** outputs.
+| Set | Projection seed | Vectors |
+| ---: | ---: | ---: |
+| 0 | 20261109 | 32 |
+| 1 | 20261110 | 32 |
 
+**Set 0 parity:** Phase 4 Set 0 reproduces Corrected Phase 3 (same seed); merge reports `validation_warnings_phase3_parity: []`.
 
-| τ | A→A: Split-A % | A→B: Split-B % |
-| --- | ---: | ---: |
-| 800 | 79 | 92 |
-| 600 | 98 | 95 |
-| 400 | 78 | 95 |
-| 200 | 83 | 49 |
+Cross-set variation is small for A→A One-Step (|Δ| rank@10 ≲ 4×10⁻⁴) but larger for A→B One-Step (up to **0.013** rank@10 at τ = 800). Cosine NDCG varies less than rank NDCG under resampled projections.
 
-These align loosely with B dominance on A→B at most τ, but **τ=200 A→B** does not show split-B majority (49%)—a reminder that classifier group fractions are a coarse check, not the primary metric.
+| τ | Case | \|rank@10<sub>set0</sub> − rank@10<sub>set1</sub>\| | \|cos@10<sub>set0</sub> − cos@10<sub>set1</sub>\| |
+| ---: | --- | ---: | ---: |
+| 800 | A→B One | 0.0134 | 7.6×10⁻⁴ |
+| 600 | A→B One | 0.0169 | 8.7×10⁻⁴ |
+| 400 | A→B Full | 0.0143 | 1.5×10⁻³ |
+| 200 | A→A Full | 0.0110 | 1.0×10⁻³ |
 
-**Sampling quality audit** (separate GPU 999→0 run, ckpt 46k): **Pure Model B** already yields **86% Bag** among 100 fixed noises; **A→B Full at τ=400** reaches **95% Bag**. That bias is **observed** in generated images; it does not by itself explain gradient NDCG, but it cautions against interpreting Bag-heavy A→B grids as a pipeline bug.
+![Projection stability](visualizations/2026-11-10_cross-injection-gradient-proximity/fig5_projection_stability.png)
 
-![Qualitative grid τ=400](visualizations/2026-11-10_cross-injection-gradient-proximity/grid_AA_AB_pairs_tau400.png)
-
-**Figure 5.** A→A vs A→B full outputs (τ=400, noise IDs 0–99); copied from Phase 2 plots (read-only source).
-
----
-
-## 7. Discussion and Conclusion
-
-### Key findings
-
-1. **One-Step A→A** rank NDCG@10 ≈ 0.998–0.999 at all τ: the reference mid-block neighborhood is stable under a single in-model DDIM step.
-2. **One-Step A→B** stays well below A→A (0.34–0.52) with Δ<sub>switch</sub> **largest at τ=600** (0.657), not at τ=800 or τ=200.
-3. **Full t = 0 probes** show rank NDCG ≈ 0.17–0.34, only modestly above random (≈ 0.083): endpoint sensitivity neighborhoods **do not** mirror the nearly perfect One-Step A→A structure.
-
-### Hypothesis evaluation
-
-If one hypothesized that **later** injection (smaller τ, closer to `x_0`) always maximizes model-switch disruption, Phase 3 does **not** support a simple monotonic rule: the worst One-Step A→B preservation is at **τ=600**, and τ=800 shows the **smallest** switching gap. **Interpretation (not measured directly):** mid-training-time dynamics under DDIM may interact non-monotonically with split specialization.
-
-### Limitations
-
-Two split-trained models, single checkpoint, 100 anchors, FashionMNIST resolution, mid-block-only features, Full metric at **fixed t = 0** rather than in-step Jacobians, and strong **Bag / split-B** classifier skew on Model B and cross paths.
-
-### Next steps
-
-1. Repeat with cosine-grade vs rank-grade side-by-side dashboards (cosine already in `tau_report.json`).
-2. Optional B→B and pure-A/B baselines at matched τ to separate injection from pure model bias.
-3. Larger noise panels or held-out IDs to tighten bootstrap uncertainty on τ-dependent gaps.
+**Figure 6.** |rank NDCG@10<sup>(0)</sup> − NDCG@10<sup>(1)</sup>| by case and τ. Largest sensitivity on **A→B** paths (One-Step and Full).
 
 ---
 
-*Raw assets:* `full_ckpt46000_phase3_20261110/tau_<τ>/tau_report.json`, per-τ `plots/`, `classifier_*.json`. Phase 2 τ=400 directory unchanged (symlink). No training reruns.*
+## 7. Discussion
+
+### A. One-Step neighborhood preservation
+
+- **A→A:** Rank NDCG@10 ≈ **0.996–0.999** at all τ; top-10 overlap ≈ **0.98–1.00**.
+- **A→B:** Rank NDCG@10 **0.68–0.78**—far above random (~0.083) but clearly below A→A. **Minimum at τ = 600** in both projection sets (~0.675–0.692 Set 0; ~0.592 overlap).
+- Cosine-grade One-Step NDCG masks much of this gap (> 0.98 for A→B); **rank-grade** is necessary to see switching.
+
+### B. Full denoising
+
+- One-Step A→A ≫ Full: endpoint t = 0 probes rank ≈ **0.26–0.57** vs ≈ **1.0** One-Step.
+- Full rank NDCG **increases** as injection moves later (800 → 200): e.g. A→A Full **0.263 → 0.569**, A→B Full **0.263 → 0.549**.
+- A→A vs A→B Full: rank gaps are **small at τ = 800** (~0.000) and **modest elsewhere** (e.g. Δ ≈ 0.05 at τ = 600, ~0.036 at τ = 400); not always A→A > A→B at t = 0 (τ = 800 Set 0: A→B slightly higher).
+
+### C. Projection stability
+
+- Qualitative pattern (**A→A high, A→B lower, τ = 600 dip**) is stable across both seeds.
+- **Rank metrics** show more projection sensitivity than **cosine metrics**, especially on A→B.
+- Set 0 ≡ Corrected Phase 3 within numerical tolerance (~10⁻⁵).
+
+### D. Switching effect
+
+One-Step rank Δ<sub>switch</sub> is **largest at τ = 600** (0.315 mean), then 800 (0.258), 400 (0.231), 200 (0.216)—**not** monotonic in “how late” injection is. Set 1 slightly widens gaps vs Set 0 at τ = 800/600 (~+0.013 rank A→B One at 800).
+
+**Classifier (full outputs, Set 0, mean P(split-A group)):** A→A ≈ **67%** across τ; A→B ≈ **18%** (800), **22%** (600), **34%** (400), **50%** (200). Coarse alignment with B-ward generation; not used as primary evidence.
+
+![Qualitative grid τ = 400](visualizations/2026-11-10_cross-injection-gradient-proximity/grid_AA_AB_pairs_tau400.png)
+
+**Figure 7.** A→A vs A→B full outputs (τ = 400, corrected Phase 3 plots).
+
+---
+
+## 8. Limitations
+
+- Single checkpoint (46k), one dataset resolution, **two** projection sets only (n = 2 for cross-set std).
+- Mid-block features only; 100 fixed noise IDs.
+- Full metric is a **t = 0** sensitivity probe, not in-step DDIM Jacobians.
+- Classifier uses **predicted** labels; strong split-B prior on Model B samples.
+- Phase 4 ran with `--no-plots` in-run; report figures are rebuilt from JSON.
+
+---
+
+## 9. Conclusion
+
+After correcting DDIM-until-τ sampling, cross-injection gradient neighborhoods are **measurable and reproducible**. **One-Step A→A** preserves reference rankings almost perfectly; **One-Step A→B** preserves partial structure with a **τ = 600** vulnerability under rank-grade metrics. **Full t = 0** probes show much weaker alignment but improve toward smaller τ. Two independent projection banks confirm the main pattern; rank-based metrics are more informative—and more projection-sensitive—than cosine-grade NDCG for this experiment.
+
+---
+
+*Raw assets:* Corrected Phase 3 — `full_ckpt46000_phase3_corrected_20261110/tau_<τ>/tau_report.json`. Phase 4 — `full_ckpt46000_phase4_proj2_20261110/tau_<τ>/projection_set_<0|1>/tau_report.json`, `sampling_shared/`, `merged_report.json`. Sampling audit — `sampling_fix_audit_ckpt46000/audit_report.json`. No training or GPU reruns for this report.*
