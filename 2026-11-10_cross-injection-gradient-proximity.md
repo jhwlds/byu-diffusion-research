@@ -1,5 +1,9 @@
 # FMNIST split cross-injection — Gradient proximity (corrected sampling, ckpt 46k)
 
+## Abstract
+
+We study whether **gradient neighborhoods** (peer rankings from random-projected mid-block sensitivities) stay aligned when denoising continues with a **class-split Model B** instead of Model A, starting from the same intermediate state `x_τ^A`. On FashionMNIST split diffusion (checkpoint 46k), we fix 100 noise anchors and inject at τ ∈ {800, 600, 400, 200}. **One-Step A→A** rank NDCG@10 ≈ 1.0; **A→B One-Step** is lower with a clear minimum at **τ = 600** (μ = 0.684), reproduced under two projection seeds. **Full t = 0** probes show strong neighborhood **reorganization even without switching** (A→A Full drops to ≈ 0.26–0.57); switching adds a smaller endpoint gap. We separate **Δ_switch** (model swap) from **Δ_proj** (projection seed disagreement). Effects of trajectory change and Model B's distinct gradient geometry are **not isolated** in this design—disentangling them is future work.
+
 **Scope:** Model A/B class-split unconditional diffusion; shared `x_τ^A` from Model A; injection τ ∈ {800, 600, 400, 200}; mid-block random-projected gradient neighborhoods (N = 100 noise IDs 0–99).  
 **Primary source:** `experiments/fmnist_split_cross_injection/full_ckpt46000_phase4_proj2_20261110/merged_report.json` (`validation: ok`). Set 0 (seed 20261109) matches Corrected Phase 3.
 
@@ -31,7 +35,7 @@ Phase 4 repeats all gradient metrics under **two projection sets** (seeds 202611
 | Model A classes | 0, 2, 3, 4, 6 |
 | Model B classes | 1, 5, 7, 8, 9 |
 | Split size | 30,000 images per model |
-| Init / training | Same initial weights; independent fine-tuning to **EMA step 46000** |
+| Init / training | Same initial weights; **trained independently from identical initial weights** to **EMA step 46000** |
 | Sampling | DDIM, η = 0, 1000 train timesteps |
 | Noise anchors | Fixed IDs **0–99** (`fixed_noise_1000.pt`) |
 | Injection τ | 800, 600, 400, 200 |
@@ -71,7 +75,7 @@ $$
 $$
 
 - **Rank-grade:** Reference top-k neighbors get grades k, k−1, …, 1; others 0.
-- **Cosine-grade:** Relevance of neighbor j is **(S<sup>ref</sup><sub>ij</sub> + 1) / 2**.
+- **Cosine-grade:** Relevance of neighbor j is **(S<sup>ref</sup><sub>ij</sub> + 1) / 2**. High cosine NDCG does **not** imply preserved gradient directions: all peers receive positive relevance, so scores stay inflated relative to **rank-grade**. Primary switching claims use **rank-grade**.
 
 ### Two distinct gap metrics
 
@@ -155,7 +159,101 @@ Random baseline (rank NDCG@10) ≈ **0.083–0.084** per τ.
 
 **Supplementary.** A→A vs A→B full outputs (τ = 400, corrected Phase 3 plots).
 
-### 5.3 Full metric tables (Set 0, Set 1, μ, *s*)
+### 5.3 Full metric tables
+
+Complete Case × τ tables (Set 0, Set 1, μ, *s*) for all six metrics, plus Δ_proj and Δ_switch, are in **Appendix A**.
+
+### 5.4 Full vs One-Step — rank NDCG@10 (μ only)
+
+Reference neighborhoods use **(x_τ^A, t = τ)**; Full cases probe **(x_0, t = 0)**. Even **without** model switching, Full rank NDCG drops far below One-Step A→A:
+
+| τ | A→A Full μ | A→B Full μ | μ difference (A→A − A→B) |
+| ---: | ---: | ---: | ---: |
+| 800 | 0.2634 | 0.2632 | 0.0002 |
+| 600 | 0.3957 | 0.3461 | 0.0496 |
+| 400 | 0.4968 | 0.4611 | 0.0357 |
+| 200 | 0.5687 | 0.5489 | 0.0199 |
+
+At τ = 800, Full A→A and A→B are nearly tied: endpoint misalignment is dominated by **denoising to t = 0**, not by the B swap alone.
+
+## 6. Projection reproducibility
+
+| Set | Projection seed | Vectors |
+| ---: | ---: | ---: |
+| 0 | 20261109 | 32 |
+| 1 | 20261110 | 32 |
+
+Set 0 matches Corrected Phase 3 (same seed); merge reports `validation_warnings_phase3_parity: []`.
+
+### 6.1 Maximum $\Delta_{\mathrm{proj}}$ (from Phase 4 JSON, recomputed)
+
+| Quantity | Scope | Max value | τ | Case / metric |
+| --- | --- | ---: | ---: | --- |
+| Rank NDCG@10 | A→B One-Step only | **0.0169** | 600 | A→B One |
+| Rank NDCG@10 | **All cases** | **0.0259** | 400 | A→A Full |
+| Cosine NDCG@10 | All cases | 0.003870 | 400 | A→A Full |
+| Top-10 overlap | All cases | 0.0260 | 400 | A→A Full |
+
+**Do not** summarize projection sensitivity as a single “~0.013” without specifying metric and case. A→A One-Step rank @10 has $|\Delta_{\mathrm{proj}}|\lesssim 7\times 10^{-4}$ at all τ; larger rank $\Delta_{\mathrm{proj}}$ appears on **Full** paths and some **A→B** One-Step τ values.
+
+Interpretation: **exploratory reproducibility across two projection seeds**—qualitative patterns align, but n = 2 does not establish general projection stability.
+
+---
+
+## 7. Discussion
+
+### One-Step: what changes under A→B?
+
+**Reference** gradients use Model A at **(x_τ^A, t = τ)**. **A→A One-Step** applies one DDIM step with A, then probes at **(x_{τ′}^{AA}, t = τ′)**—latent and timestep move, **same model**.
+
+**A→B One-Step** applies one DDIM step with B, then probes at **(x_{τ′}^{AB}, t = τ′)**—latent, timestep, **and UNet** all differ from the reference construction path.
+
+The observed A→B neighborhood change reflects **both** the altered denoising trajectory and the use of **Model B's gradient geometry**. These effects are **not isolated** in the current experiment; we cannot attribute the full rank NDCG drop to a single cross-injection DDIM update alone.
+
+**Observations (rank NDCG@10):** A→A μ ≈ **0.996–0.999** at all τ. A→B μ ≈ **0.684–0.783**, well above random (~0.083). **τ = 600** is the **minimum** for A→B One-Step (μ = **0.6839**; both projection sets).
+
+**τ = 600 dip — observation, not mechanism.** The largest immediate gap vs A→A appears at τ = 600, not at the noisiest (800) or cleanest (200) injection. We observe this in **both** projection sets. A plausible hypothesis is that split-specific gradient neighborhoods differ most in that noise regime, but we have **not** separated causes (τ / latent / model geometry) and treat the mechanism as an **open question** for presentation: *Why 600?* → consistent pattern, cause not yet identified.
+
+### Full denoising: not “collapse from B alone”
+
+Full-denoising results show **substantial neighborhood reorganization even without model switching** (A→A Full μ ≈ **0.26–0.57** vs One-Step A→A ≈ 1.0). The reference is at **t = τ** on x_τ^A; Full probes at **t = 0** on completed images—different **state and time index**.
+
+The additional **switching-related** gap at the endpoint is **comparatively small** at several τ (e.g. τ = 800: A→A vs A→B Full μ differ by **0.0002**). Full rank NDCG **increases** as injection moves toward completion (τ 800 → 200). See §5.4.
+
+### Projection reproducibility
+
+Qualitative patterns appear in **both** seeds (**exploratory**, n = 2). **Rank** metrics show larger Δ_proj than **cosine** on some cells.
+
+### Switching effect (Δ_switch vs Δ_proj)
+
+One-Step rank Δ_switch (μ) peaks at **τ = 600** (0.315). Across projection sets, One-Step Δ_switch differs by up to **0.0172** (τ = 200). **Figure 5** = model swap within a seed; **Figure 4** = seed disagreement.
+
+**Classifier (auxiliary):** Set 0 mean P(split-A group) on full outputs: A→A ≈ 67%; A→B ≈ 18% / 22% / 34% / 50% at τ 800 / 600 / 400 / 200.
+
+
+## 8. Limitations
+
+- **A→B One-Step confounding:** Trajectory change (x, t) and Model B's gradient map are coupled; no B-only baseline at the same (x_{τ′}, t) probe.
+- **Projection sets n = 2** (exploratory reproducibility only).
+- 100 fixed noise IDs; FashionMNIST 32×32; small unconditional U-Net.
+- Mid-block gradient features only; Full probe at **t = 0**, not in-step DDIM Jacobians.
+- Classifier uses predicted labels.
+- Phase 4 ran with `--no-plots` in-run; report figures rebuilt from JSON via `build_corrected_phase4_report_figures.py`.
+
+---
+
+## 9. Conclusion
+
+Same-model **One-Step** denoising almost perfectly preserves rank gradient neighborhoods. **Switching to Model B** yields substantial reorganization under rank-grade metrics, with the **largest One-Step gap at τ = 600**—an observed pattern whose mechanism remains open. **Full t = 0** probes show large realignment **even for A→A**, so endpoint metrics must not be read as switch-only collapse. Two projection seeds give **exploratory** agreement on the main pattern.
+
+**Next step:** Separate the effect of **changing the model's gradient representation** from the effect of the **DDIM update and trajectory** (e.g. matched probes, B-only baselines at shared states).
+
+---
+
+## Appendix A — Complete metric tables
+
+Tables list every Case × τ combination. *s* uses n = 2 projection sets (ddof = 1).
+
 
 Tables list every Case × τ combination. *s* is the sample standard deviation with **n = 2** projection sets (ddof = 1).
 
@@ -318,71 +416,6 @@ Absolute difference between projection sets for the same case and τ. Columns: r
 | 200 | 0.2245 | 0.2073 | 0.2159 | 0.0092 | 0.0305 | 0.0199 |
 ---
 
-## 6. Projection reproducibility
-
-| Set | Projection seed | Vectors |
-| ---: | ---: | ---: |
-| 0 | 20261109 | 32 |
-| 1 | 20261110 | 32 |
-
-Set 0 matches Corrected Phase 3 (same seed); merge reports `validation_warnings_phase3_parity: []`.
-
-### 6.1 Maximum $\Delta_{\mathrm{proj}}$ (from Phase 4 JSON, recomputed)
-
-| Quantity | Scope | Max value | τ | Case / metric |
-| --- | --- | ---: | ---: | --- |
-| Rank NDCG@10 | A→B One-Step only | **0.0169** | 600 | A→B One |
-| Rank NDCG@10 | **All cases** | **0.0259** | 400 | A→A Full |
-| Cosine NDCG@10 | All cases | 0.003870 | 400 | A→A Full |
-| Top-10 overlap | All cases | 0.0260 | 400 | A→A Full |
-
-**Do not** summarize projection sensitivity as a single “~0.013” without specifying metric and case. A→A One-Step rank @10 has $|\Delta_{\mathrm{proj}}|\lesssim 7\times 10^{-4}$ at all τ; larger rank $\Delta_{\mathrm{proj}}$ appears on **Full** paths and some **A→B** One-Step τ values.
-
-Interpretation: **exploratory reproducibility across two projection seeds**—qualitative patterns align, but n = 2 does not establish general projection stability.
-
----
-
-## 7. Discussion
-
-### One-Step
-
-- **A→A** preserves reference neighborhoods: rank NDCG@10 μ ≈ **0.996–0.999** at all τ.
-- **A→B** shows materially lower rank NDCG (μ ≈ **0.684–0.783**), still above random (~0.083).
-- **τ = 600** gives the **minimum A→B One-Step** rank NDCG@10 (μ = **0.6839**, Set 0 = 0.6924, Set 1 = 0.6755).
-
-### Full denoising
-
-- Rank NDCG@10 at t = 0 is **much lower** than One-Step A→A (e.g. μ ≈ 0.26–0.57 vs ≈ 1.0).
-- Full rank NDCG **increases** as injection moves toward completion (τ 800 → 200): A→A Full **0.263 → 0.569**, A→B Full **0.263 → 0.549**.
-- **A→A vs A→B Full** differs from One-Step: at τ = 800, Full rank μ is nearly tied (~0.263); at τ = 600, A→A Full exceeds A→B Full by ~0.05 (rank); Full $\Delta_{\mathrm{switch}}$ can be **negative in one set** at τ = 800 (Set 0: −0.0176), so signed per-set gaps matter.
-
-### Projection reproducibility
-
-- Main qualitative pattern (high A→A One-Step, lower A→B One-Step, τ = 600 dip) appears in **both** seeds.
-- **Rank** metrics show larger $\Delta_{\mathrm{proj}}$ than **cosine** on several Full / A→B cells (see projection table in §5.3).
-- This is **not** a proof of global projection stability—only a check with **two** banks.
-
-### Switching effect ($\Delta_{\mathrm{switch}}$, not $\Delta_{\mathrm{proj}}$)
-
-One-Step rank $\Delta_{\mathrm{switch}}$ (μ): **0.315** (τ = 600) > 0.258 (800) > 0.231 (400) > 0.216 (200). **Across projection sets**, the One-Step switching gap (same metric, rank NDCG@10, A→A − A→B) differs by at most **0.0172** (τ = 200; Set 0 = 0.2245, Set 1 = 0.2073). At τ = 800 the set-to-set difference is **0.0130** (0.2649 − 0.2519). This is **not** projection sensitivity $\Delta_{\mathrm{proj}}$ on a single case; see the switching table in §5.3 vs the $\Delta_{\mathrm{proj}}$ table above it.
-
-**Classifier (full, Set 0, mean P(split-A group)):** A→A ≈ 67%; A→B ≈ 18% / 22% / 34% / 50% at τ 800 / 600 / 400 / 200 (auxiliary).
-
----
-
-## 8. Limitations
-
-- **Projection sets n = 2** (exploratory reproducibility only).
-- 100 fixed noise IDs; FashionMNIST 32×32; small unconditional U-Net.
-- Mid-block gradient features only; Full probe at **t = 0**, not in-step DDIM Jacobians.
-- Classifier uses predicted labels.
-- Phase 4 ran with `--no-plots` in-run; report figures rebuilt from JSON via `build_corrected_phase4_report_figures.py`.
-
----
-
-## 9. Conclusion
-
-After corrected DDIM-until-τ sampling, cross-injection gradient neighborhoods are measurable and reproducible across two projection seeds. **One-Step A→A** nearly preserves rank neighborhoods; **One-Step A→B** shows partial preservation with a **τ = 600** minimum. **Full t = 0** probes align more weakly but improve at later injection. **$\Delta_{\mathrm{switch}}$** (model swap) and **$\Delta_{\mathrm{proj}}$** (seed swap) answer different questions and must be read from separate tables and Figures 4–5.
 
 ---
 
