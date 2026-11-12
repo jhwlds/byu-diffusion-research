@@ -167,7 +167,7 @@ This *s* is a **sample** standard deviation across two projection banks only; it
 | 400 | 0.9990 ± 0.0002 | 0.7686 ± 0.0040 | 0.4968 ± 0.0183 | 0.4611 ± 0.0101 |
 | 200 | 0.9991 ± 0.0003 | 0.7832 ± 0.0118 | 0.5687 ± 0.0078 | 0.5489 ± 0.0073 |
 
-### 5.2 Figure 1 — Rank NDCG@10
+### 5.2 Figure 1 — Rank NDCG@10 — *How well are the original top-10 neighbor rankings preserved?*
 
 **Metric.** Rank-grade neighborhood preservation (primary switching metric).
 
@@ -200,7 +200,7 @@ $$
 
 **Key observations.** **A→A One-Step** ≈ **1.0** at all τ. **A→B One-Step** is lowest at **τ = 600** (μ = **0.6839**). **Full** curves sit well below One-Step A→A (see §5.7).
 
-### 5.3 Figure 2 — Cosine NDCG@10
+### 5.3 Figure 2 — Cosine NDCG@10 — *Are highly similar reference neighbors still ranked near the top?*
 
 **Metric.** Same DCG / NDCG formulas as §5.2, with cosine-based relevance:
 
@@ -221,7 +221,7 @@ $$
 
 **Key observations.** A→A and A→B One-Step cosine NDCG both stay **> 0.98**; switching effects visible under **rank** NDCG are compressed here. Use Figure 1 for switching claims.
 
-### 5.4 Figure 3 — Top-10 neighborhood overlap
+### 5.4 Figure 3 — Top-10 neighborhood overlap — *How many of the original top-10 neighbors remain?*
 
 $$
 \mathrm{Overlap@}k(i)=\frac{\left|N_k^{\mathrm{ref}}(i)\cap N_k^{\mathrm{case}}(i)\right|}{k}
@@ -242,7 +242,7 @@ $$
 
 **Key observations.** A→A One-Step overlap ≈ **0.98–1.0**; A→B One-Step drops with rank NDCG (e.g. ≈ **0.61** at τ = 600). Full paths are lower still.
 
-### 5.5 Figure 4 — Projection sensitivity
+### 5.5 Figure 4 — Projection sensitivity — *How much do results change across two projection seeds?*
 
 $$
 \Delta_{\mathrm{proj}}=\left|\mathrm{NDCG}_{\mathrm{Set0}}-\mathrm{NDCG}_{\mathrm{Set1}}\right|
@@ -261,7 +261,7 @@ $$
 
 **Key observations.** A→A One-Step bars are near zero; larger bars on A→B and Full paths. Do not confuse with **Δ<sub>switch</sub>** (Figure 5).
 
-### 5.6 Figure 5 — Switching gap (One-Step)
+### 5.6 Figure 5 — Switching gap (One-Step) — *How much more neighborhood structure does A→A preserve than A→B?*
 
 $$
 \Delta_{\mathrm{switch}}(\tau)=\mathrm{NDCG}_{A\rightarrow A}(\tau)-\mathrm{NDCG}_{A\rightarrow B}(\tau)
