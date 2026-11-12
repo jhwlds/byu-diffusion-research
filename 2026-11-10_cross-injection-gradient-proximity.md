@@ -50,61 +50,41 @@ Phase 4 repeats all gradient metrics under **two projection sets** (seeds 202611
 
 ## 3. Gradient Proximity
 
-Let ε<sub>θ</sub>(x, t) be the U-Net noise prediction. With output dimension 1024 (= 1×32×32 channels flattened):
+Let ε<sub>θ</sub>(x, t) be the U-Net noise prediction. Output dimension 1024 (= 1×32×32 flattened). For each noise anchor *i*, we build a reference neighbor ranking from Model A gradients at **(x_τ^A)<sub>i</sub>, t = τ**, then compare test cases built from the same anchor. **Neighborhood metrics (NDCG, overlap, gaps)** are defined in §5 beside each Figure; this section is the shared **feature pipeline**.
+
+**1. U-Net output flattening**
 
 $$
-z_\theta(x,t)=\mathrm{vec}(\epsilon_\theta(x,t)), \qquad
-s_k=r_k^\top z_\theta(x,t), \qquad
-g_k=\nabla_{\theta_{\mathrm{mid}}}s_k, \qquad
+z_\theta(x,t)=\mathrm{vec}(\epsilon_\theta(x,t))
+$$
+
+**2. Random projection**
+
+$$
+s_k=r_k^\top z_\theta(x,t)
+$$
+
+Each r<sub>k</sub> ∈ ℝ<sup>1024</sup> is a unit vector from the projection seed (K = 32 per set; seeds 20261109 / 20261110 in Phase 4).
+
+**3. Mid-block gradient**
+
+$$
+g_k=\nabla_{\theta_{\mathrm{mid}}}s_k
+$$
+
+**4. Gradient feature concatenation**
+
+$$
 G_i=\mathrm{concat}(g_1,\ldots,g_{32})
 $$
 
-Pairwise similarities:
+**5. Gradient cosine similarity**
 
 $$
 S_{ij}=\frac{G_i^\top G_j}{\|G_i\|_2\|G_j\|_2}
 $$
 
-**Implementation (`gradient_proximity.py`):** Only mid-block parameters receive `requires_grad`; scalars s<sub>k</sub> use `torch.autograd.grad` without weight updates. Concatenated dimension **|G<sub>i</sub>| = 88,244,224**.
-
-### NDCG@k
-
-$$
-\mathrm{DCG}_k=\sum_{r=1}^{k}\frac{\mathrm{rel}(j_r)}{\log_2(r+1)}, \qquad
-\mathrm{NDCG}_k=\frac{\mathrm{DCG}_k}{\mathrm{IDCG}_k}
-$$
-
-- **Rank-grade:** Reference top-k neighbors get grades k, k−1, …, 1; others 0.
-- **Cosine-grade:** Relevance of neighbor j is **(S<sup>ref</sup><sub>ij</sub> + 1) / 2**. High cosine NDCG does **not** imply preserved gradient directions: all peers receive positive relevance, so scores stay inflated relative to **rank-grade**. Primary switching claims use **rank-grade**.
-
-### Two distinct gap metrics
-
-**Projection sensitivity** (seed disagreement, same case & τ):
-
-$$
-\Delta_{\mathrm{proj}}=\left|\mathrm{NDCG}^{(\mathrm{Set}\,0)}-\mathrm{NDCG}^{(\mathrm{Set}\,1)}\right|
-$$
-
-Optional signed form: $\Delta_{01}=\mathrm{NDCG}^{(\mathrm{Set}\,1)}-\mathrm{NDCG}^{(\mathrm{Set}\,0)}$.
-
-**Switching gap** (model swap, same projection set):
-
-$$
-\Delta_{\mathrm{switch}}=\mathrm{NDCG}_{A\to A}-\mathrm{NDCG}_{A\to B}
-$$
-
-Do not interchange $\Delta_{\mathrm{proj}}$ and $\Delta_{\mathrm{switch}}$; Figure 4 vs Figure 5 plot these separately.
-
-### Aggregation across two projection sets
-
-For each metric value $x_0$ (Set 0) and $x_1$ (Set 1):
-
-$$
-\mu=\frac{x_0+x_1}{2}, \qquad
-s=\sqrt{\frac{(x_0-\mu)^2+(x_1-\mu)^2}{n-1}}, \; n=2
-$$
-
-**Statistics check:** All §5.3 table values $(\mu,s)$ are recomputed from per-set `tau_report.json` (96 cells = 4 cases × 4 τ × 6 metrics). Rank/cosine NDCG@10 and top-10 overlap means/stds additionally match `merged_report.json` (`validate_phase4_report_data.py`). NDCG@5 and top-5 overlap are not stored in `merged_report.json`; only the per-set source + $(\mu,s)$ recomputation applies.
+Within each case, neighbors of anchor *i* are ranked by test-case S<sub>ij</sub> (self excluded). **Implementation (`gradient_proximity.py`):** only mid-block parameters use `requires_grad`; `torch.autograd.grad` does not update weights. **|G<sub>i</sub>| = 88,244,224**.
 
 ---
 
@@ -120,9 +100,21 @@ Phase 4: one `sampling_shared/` tree per τ; gradient passes differ only by proj
 
 ## 5. Results
 
-Random baseline (rank NDCG@10) ≈ **0.083–0.084** per τ.
+All plotted values are means over **N = 100** noise anchors (IDs 0–99). Phase 4 uses **two projection sets** (seeds 20261109 / 20261110) with shared DDIM latents. Complete Case × τ tables are in **Appendix A**.
 
-### 5.1 Summary — rank NDCG@10 (μ across projection sets)
+### 5.1 Summary — rank NDCG@10 (μ ± *s* across projection sets)
+
+For each scalar metric, **x<sub>0</sub>** and **x<sub>1</sub>** are the Set 0 and Set 1 values (same case, same τ):
+
+$$
+\mu=\frac{x_0+x_1}{2}
+$$
+
+$$
+s=\sqrt{\frac{(x_0-\mu)^2+(x_1-\mu)^2}{n-1}}, \quad n=2
+$$
+
+This *s* is a **sample** standard deviation across two projection banks only; it is **not** a significance test. Values match `tau_report.json`; rank/cosine NDCG@10 and top-10 overlap μ, *s* also match `merged_report.json` (see audit scripts in footer).
 
 | τ | A→A One μ ± *s* | A→B One μ ± *s* | A→A Full μ ± *s* | A→B Full μ ± *s* |
 | ---: | ---: | ---: | ---: | ---: |
@@ -131,41 +123,81 @@ Random baseline (rank NDCG@10) ≈ **0.083–0.084** per τ.
 | 400 | 0.9990 ± 0.0002 | 0.7686 ± 0.0040 | 0.4968 ± 0.0183 | 0.4611 ± 0.0101 |
 | 200 | 0.9991 ± 0.0003 | 0.7832 ± 0.0118 | 0.5687 ± 0.0078 | 0.5489 ± 0.0073 |
 
-**A→B One-Step** rank NDCG@10 is **lowest at τ = 600** (μ = 0.6839).
+### 5.2 Figure 1 — Rank NDCG@10
 
-### 5.2 Figures
+**Metric.** Rank-grade neighborhood preservation (primary switching metric).
+
+$$
+\mathrm{DCG@}k=\sum_{r=1}^{k}\frac{\mathrm{rel}(j_r)}{\log_2(r+1)}
+$$
+
+$$
+\mathrm{NDCG@}k=\frac{\mathrm{DCG@}k}{\mathrm{IDCG@}k}
+$$
+
+**Relevance (rank-grade).** From the **reference** similarity row for anchor *i*: top-k neighbors get relevances **k, k−1, …, 1**; all other peers get **0**. For each anchor, rank test-case neighbors by case-specific S<sub>ij</sub>, compute DCG@k; divide by IDCG from the reference ideal order. Average NDCG@10 over 100 anchors per (case, τ, projection set); Figure 1 plots **(Set 0 + Set 1) / 2** for each of four cases vs τ. **Random baseline** (rank NDCG@10 ≈ **0.083–0.084**): permuted test order with 50 draws (seed 20261109), reported in each `tau_report.json`.
 
 ![Figure 1](visualizations/2026-11-10_cross-injection-gradient-proximity/fig1_rank_ndcg10.png)
 
-**Figure 1.** Rank NDCG@10 vs τ (μ of Set 0 and Set 1). Four cases; random baseline dotted.
+**Key observations.** **A→A One-Step** ≈ **1.0** at all τ. **A→B One-Step** is lowest at **τ = 600** (μ = **0.6839**). **Full** curves sit well below One-Step A→A (see §5.7).
+
+### 5.3 Figure 2 — Cosine NDCG@10
+
+**Metric.** Same DCG / NDCG formulas as §5.2, with cosine-based relevance:
+
+$$
+\mathrm{rel}_{\mathrm{cos}}(j)=\frac{S_{ij}^{\mathrm{ref}}+1}{2}
+$$
+
+**Calculation.** Relevance uses the **reference** cosine S<sub>ij</sub><sup>ref</sup> (not rank grades). Every non-self peer can have **positive** relevance, so NDCG stays high even when **ranks** reshuffle. **Rank-grade** (Figure 1) is stricter: only the reference top-k receive positive relevance. High cosine NDCG does **not** mean Model A/B raw gradient **directions** are preserved—it reflects the softer relevance definition. Figure 2: mean of Set 0 and Set 1 per case.
 
 ![Figure 2](visualizations/2026-11-10_cross-injection-gradient-proximity/fig2_cosine_ndcg10.png)
 
-**Figure 2.** Cosine NDCG@10 vs τ (set mean). Cosine-grade compresses switching effects vs rank-grade.
+**Key observations.** A→A and A→B One-Step cosine NDCG both stay **> 0.98**; switching effects visible under **rank** NDCG are compressed here. Use Figure 1 for switching claims.
+
+### 5.4 Figure 3 — Top-10 neighborhood overlap
+
+$$
+\mathrm{Overlap@}k(i)=\frac{\left|N_k^{\mathrm{ref}}(i)\cap N_k^{\mathrm{case}}(i)\right|}{k}
+$$
+
+**Variables.** N<sub>k</sub><sup>ref</sup>(i) and N<sub>k</sub><sup>case</sup>(i) are the top-k neighbor **sets** of anchor *i* (by reference vs case similarity); self excluded; **k = 10**. Example: 7 of the reference top-10 appear in the case top-10 → Overlap@10 = **0.7**. **Order within the top-k is ignored.** Mean over 100 anchors; Figure uses Set 0 / Set 1 average per case.
 
 ![Figure 3](visualizations/2026-11-10_cross-injection-gradient-proximity/fig3_top10_overlap.png)
 
-**Figure 3.** Top-10 neighborhood overlap vs τ (set mean).
+**Key observations.** A→A One-Step overlap ≈ **0.98–1.0**; A→B One-Step drops with rank NDCG (e.g. ≈ **0.61** at τ = 600). Full paths are lower still.
+
+### 5.5 Figure 4 — Projection sensitivity
+
+$$
+\Delta_{\mathrm{proj}}=\left|\mathrm{NDCG}_{\mathrm{Set0}}-\mathrm{NDCG}_{\mathrm{Set1}}\right|
+$$
+
+**Calculation.** Same case, same τ, same 100 anchors; only the **projection seed** (32 directions) changes. Figure 4 uses **rank NDCG@10**. Small Δ<sub>proj</sub> ⇒ similar **reported** NDCG under two banks (**exploratory** n = 2); not neighborhood preservation, and similar NDCG does **not** imply identical neighbor identities. Maxima (rank @10): **A→B One 0.0169 @ τ = 600**; **all cases 0.0259 (A→A Full, τ = 400)**—see §6.1.
 
 ![Figure 4](visualizations/2026-11-10_cross-injection-gradient-proximity/fig4_projection_sensitivity.png)
 
-**Figure 4.** $\Delta_{\mathrm{proj}}$ for **rank NDCG@10**: $|\mathrm{Set}\,0-\mathrm{Set}\,1|$ per case and τ. This is **not** neighborhood preservation under model switching.
+**Key observations.** A→A One-Step bars are near zero; larger bars on A→B and Full paths. Do not confuse with **Δ<sub>switch</sub>** (Figure 5).
+
+### 5.6 Figure 5 — Switching gap (One-Step)
+
+$$
+\Delta_{\mathrm{switch}}(\tau)=\mathrm{NDCG}_{A\rightarrow A}(\tau)-\mathrm{NDCG}_{A\rightarrow B}(\tau)
+$$
+
+**Calculation.** **Same projection set**; **rank NDCG@10**; **One-Step** cases only. Positive gap ⇒ A→A preserves reference neighborhoods better than A→B at that τ. Bars show Set 0 and Set 1 separately; largest mean gap at **τ = 600 (μ ≈ 0.315)**. This gap mixes **DDIM trajectory change** and **Model B gradient geometry**—not a pure cross-injection update effect (see §7).
 
 ![Figure 5](visualizations/2026-11-10_cross-injection-gradient-proximity/fig5_switching_gap.png)
 
-**Figure 5.** $\Delta_{\mathrm{switch}}$ (One-Step rank NDCG@10, A→A − A→B) per projection set. Largest **μ** at **τ = 600** (0.315).
+**Key observations.** One-Step switching gap peaks at **τ = 600**. Set-to-set variation in the gap (up to **≈ 0.017** at τ = 200) is tabulated in Appendix A (switching table).
 
 ![Qualitative grid τ = 400](visualizations/2026-11-10_cross-injection-gradient-proximity/grid_AA_AB_pairs_tau400.png)
 
 **Supplementary.** A→A vs A→B full outputs (τ = 400, corrected Phase 3 plots).
 
-### 5.3 Full metric tables
+### 5.7 Full vs One-Step — rank NDCG@10 (μ)
 
-Complete Case × τ tables (Set 0, Set 1, μ, *s*) for all six metrics, plus Δ_proj and Δ_switch, are in **Appendix A**.
-
-### 5.4 Full vs One-Step — rank NDCG@10 (μ only)
-
-Reference neighborhoods use **(x_τ^A, t = τ)**; Full cases probe **(x_0, t = 0)**. Even **without** model switching, Full rank NDCG drops far below One-Step A→A:
+Reference: **(x_τ^A, t = τ)**. Full cases: **(x<sub>0</sub>, t = 0)** on completed images. Even **without** switching, **A→A Full** rank NDCG drops far below One-Step A→A:
 
 | τ | A→A Full μ | A→B Full μ | μ difference (A→A − A→B) |
 | ---: | ---: | ---: | ---: |
@@ -174,7 +206,9 @@ Reference neighborhoods use **(x_τ^A, t = τ)**; Full cases probe **(x_0, t = 0
 | 400 | 0.4968 | 0.4611 | 0.0357 |
 | 200 | 0.5687 | 0.5489 | 0.0199 |
 
-At τ = 800, Full A→A and A→B are nearly tied: endpoint misalignment is dominated by **denoising to t = 0**, not by the B swap alone.
+Full-denoising shows **substantial neighborhood reorganization without model switching**; the extra switching-related gap at the endpoint is **comparatively small** at several τ (e.g. **0.0002** at τ = 800). Full rank NDCG **rises** as injection moves toward completion (τ 800 → 200).
+
+---
 
 ## 6. Projection reproducibility
 
@@ -218,7 +252,7 @@ The observed A→B neighborhood change reflects **both** the altered denoising t
 
 Full-denoising results show **substantial neighborhood reorganization even without model switching** (A→A Full μ ≈ **0.26–0.57** vs One-Step A→A ≈ 1.0). The reference is at **t = τ** on x_τ^A; Full probes at **t = 0** on completed images—different **state and time index**.
 
-The additional **switching-related** gap at the endpoint is **comparatively small** at several τ (e.g. τ = 800: A→A vs A→B Full μ differ by **0.0002**). Full rank NDCG **increases** as injection moves toward completion (τ 800 → 200). See §5.4.
+The additional **switching-related** gap at the endpoint is **comparatively small** at several τ (e.g. τ = 800: A→A vs A→B Full μ differ by **0.0002**). Full rank NDCG **increases** as injection moves toward completion (τ 800 → 200). See §5.7.
 
 ### Projection reproducibility
 
@@ -252,10 +286,7 @@ Same-model **One-Step** denoising almost perfectly preserves rank gradient neigh
 
 ## Appendix A — Complete metric tables
 
-Tables list every Case × τ combination. *s* uses n = 2 projection sets (ddof = 1).
-
-
-Tables list every Case × τ combination. *s* is the sample standard deviation with **n = 2** projection sets (ddof = 1).
+Tables list every Case × τ combination. *s* is the sample standard deviation with **n = 2** projection sets (ddof = 1). μ, *s* formulas: §5.1.
 
 #### Rank NDCG@5
 
