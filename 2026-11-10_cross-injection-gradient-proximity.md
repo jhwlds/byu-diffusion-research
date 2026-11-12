@@ -184,6 +184,39 @@ $$
 | log₂(r+1) | Logarithmic rank discount (earlier ranks in the list contribute more). |
 | Σ (r = 1…k) | Sum of discounted relevance over the top-k positions in the case ranking. |
 
+**Intuitive Explanation — What does DCG measure?**
+
+DCG measures how well the originally important neighbors remain near the top of the new ranking.
+
+It considers two things:
+
+1. **How important was this neighbor in the original reference ranking?** → `rel(j_r)`
+2. **Where does this neighbor rank after the experiment?** → `r`
+
+A neighbor with high reference relevance contributes more to DCG when it remains near the top of the evaluated case ranking. If it moves down, its contribution is discounted.
+
+**In simple terms:** DCG rewards keeping originally important neighbors at high ranks.
+
+$$
+\mathrm{IDCG@}k=\sum_{r=1}^{k}\frac{k-r+1}{\log_2(r+1)}
+$$
+
+| Symbol | Meaning |
+| --- | --- |
+| k | Number of reference neighbors being evaluated (**10** in our experiment). |
+| r | Rank position in the ideal reference ranking (1,…,k). |
+| k−r+1 | Relevance assigned to each reference neighbor (**10, 9, …, 1** under rank-grade). |
+| log₂(r+1) | Rank discount factor; lower positions contribute less. |
+| Σ (r = 1…k) | Sum of discounted relevance scores across the top-k positions. |
+
+**Intuitive Explanation — What does IDCG measure?**
+
+IDCG calculates the maximum possible DCG score, assuming the original reference neighbors remain in their exact original ranking order.
+
+It represents the **ideal score** that the actual DCG is compared against.
+
+**In simple terms:** IDCG is the highest DCG score we could get if the neighbor rankings were perfectly preserved.
+
 $$
 \mathrm{NDCG@}k=\frac{\mathrm{DCG@}k}{\mathrm{IDCG@}k}
 $$
