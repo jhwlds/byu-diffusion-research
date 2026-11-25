@@ -2,7 +2,7 @@
 
 ## Abstract
 
-We extend the Phase 4 cross-injection gradient-proximity study in two directions. **Experiment 1 (Small Timestep Extension)** adds injection timesteps τ ∈ {150, 100, 50, 25, 10} to the original {800, 600, 400, 200}, yielding a nine-point curve at EMA checkpoint 46k with 100 fixed noise anchors and two projection sets (K = 32). **One-Step** switching gaps do **not** shrink monotonically toward τ = 10; the largest One-Step disruption remains near **τ = 600** (NDCG gap ≈ 0.315). **Experiment 2 (Canonical A-full vs B-full baseline)** compares independently denoised Model A and Model B final gradient neighborhoods using the **same** rank-grade NDCG@10 and top-10 overlap definitions. After invalidating legacy audit latents, the **official** structural baseline is rank NDCG@10 **0.1228** (top-10 overlap **0.1360**, projection-set mean). Re-analyzing cross-injection **A→B Full** under a **common A-full reference** shows higher endpoint alignment when Model A’s trajectory is shared longer before switching—not contradictory with Experiment 1’s τ-local reference.
+We extend the Phase 4 cross-injection gradient-proximity study in two directions. **Experiment 1 (Small Timestep Extension)** adds injection timesteps τ ∈ {150, 100, 50, 25, 10} to the original {800, 600, 400, 200}, yielding a nine-point curve at EMA checkpoint 46k with 100 fixed noise anchors and two projection sets (K = 32). **One-Step** switching gaps do **not** shrink monotonically toward τ = 10; among the **nine measured injection τ values**, the largest One-Step disruption occurs at **τ = 600** (NDCG gap ≈ 0.315). **Experiment 2 (Canonical A-full vs B-full baseline)** compares independently denoised Model A and Model B final gradient neighborhoods using the **same** rank-grade NDCG@10 and top-10 overlap definitions. After invalidating legacy audit latents, the **official** structural baseline is rank NDCG@10 **0.1228** (top-10 overlap **0.1360**, projection-set mean). Re-analyzing cross-injection **A→B Full** under a **common A-full reference** shows higher endpoint alignment when Model A’s trajectory is shared longer before switching—not contradictory with Experiment 1’s τ-local reference.
 
 **Prior report (unchanged):** [2026-11-10_cross-injection-gradient-proximity.md](2026-11-10_cross-injection-gradient-proximity.md) (Phase 4 only).
 
@@ -80,23 +80,23 @@ Table values are **arithmetic means** over projection sets 0 and 1 (verified aga
 
 ![Figure 1](visualizations/cross_injection_followup_20261125/figure1_one_step_ndcg.png)
 
-*Figure 1.* One-Step rank NDCG@10 vs injection τ (projection-set mean). A→A stays near ceiling; A→B is lowest near τ = 600 and higher at late τ, but does not match A→A.
+*Figure 1.* One-Step rank NDCG@10 vs injection τ (projection-set mean). A→A stays near ceiling; A→B is lowest near τ = 600 and higher at late τ, but does not match A→A. Injection timesteps are displayed as equally spaced experimental conditions; horizontal spacing does not represent linear timestep intervals.
 
 ![Figure 2](visualizations/cross_injection_followup_20261125/figure2_one_step_overlap.png)
 
-*Figure 2.* One-Step top-10 overlap. Same qualitative pattern as NDCG.
+*Figure 2.* One-Step top-10 overlap. Same qualitative pattern as NDCG. Injection timesteps are displayed as equally spaced experimental conditions; horizontal spacing does not represent linear timestep intervals.
 
 ![Figure 3](visualizations/cross_injection_followup_20261125/figure3_one_step_gap.png)
 
-*Figure 3.* Preservation gaps (A→A minus A→B). NDCG gap (left axis) and overlap gap (right axis).
+*Figure 3.* Preservation gaps (A→A minus A→B). NDCG gap (left axis) and overlap gap (right axis). Injection timesteps are displayed as equally spaced experimental conditions; horizontal spacing does not represent linear timestep intervals.
 
 ### 4. Key findings (Experiment 1)
 
-**Finding 1 — Same-model preservation remains high.** A→A One-Step rank NDCG@10 stays ≥ 0.996 (mean) at all nine τ; top-10 overlap ≥ 0.975.
+**Finding 1 — Same-model preservation remains high.** A→A One-Step rank NDCG@10 remains near 1.0 across all nine measured timesteps, with a minimum mean of 0.9948 at τ = 10; top-10 overlap ≥ 0.975.
 
 **Finding 2 — Cross-model injection disrupts neighborhoods at every τ.** A→B One-Step is strictly below A→A on both metrics for all τ.
 
-**Finding 3 — Largest One-Step disruption near τ = 600.** NDCG gap **0.315**; overlap gap **0.389** (projection-set means). A→B One-Step NDCG minimum **0.684** at τ = 600.
+**Finding 3 — Largest One-Step disruption at τ = 600 among nine measured τ.** NDCG gap **0.315**; overlap gap **0.389** (projection-set means). A→B One-Step NDCG minimum **0.684** at τ = 600.
 
 **Finding 4 — Late-τ gap does not monotonically decrease.** In the late band, NDCG gap falls to **0.208** at τ = 150, then **rises** to **0.268** at τ = 10 (overlap gap **0.296 → 0.341**). Thus the hypothesis that disruption **must** vanish at the end of denoising is **not supported**. This is **not** the same as claiming there is no structure: A→B **absolute** One-Step scores improve at small τ, but A→A is already near ceiling, so the **gap** can widen.
 
@@ -221,7 +221,7 @@ Experiment 1’s **late-τ One-Step gap widening** (τ = 10 vs 150) is about **l
 ### 12. Main conclusions
 
 1. **Cross-model One-Step disruption** is large at every τ (A→B &lt; A→A); e.g. τ = 600 NDCG gap **0.315**.
-2. **Peak disruption** on One-Step metrics remains near **τ = 600**, not at late τ.
+2. **Peak One-Step disruption among the nine measured τ values** occurs at **τ = 600**, not at late τ.
 3. **Late One-Step gaps do not monotonically vanish** (NDCG gap **0.208** @ 150 → **0.268** @ 10).
 4. **Independent A-full vs B-full** neighborhoods differ strongly (canonical NDCG **0.1228**, overlap **0.1360**).
 5. Under a **common A-full reference**, **A→B Full** aligns more with A-full when τ is **small** (e.g. **0.743** @ τ = 10 vs **0.123** structural baseline vs **0.246** @ τ = 800).
@@ -240,12 +240,15 @@ Experiment 1’s **late-τ One-Step gap widening** (τ = 10 vs 150) is about **l
 
 ## Part IV — Reproducibility
 
-| Artifact | Path |
-| --- | --- |
-| Late-τ merge CSV | `experiments/fmnist_split_cross_injection/analysis/late_tau_extension_20261124/merged_tau_summary.csv` |
-| Canonical baseline | `experiments/fmnist_split_cross_injection/full_ckpt46000_ab_full_baseline_canonical_20261125/` |
-| Figure script | `report_github/byu-diffusion-research/scripts/build_followup_20261125_figures.py` |
-| Invalid legacy | `.../full_ckpt46000_ab_full_baseline_20261125/LEGACY_INVALID_AUDIT_B.txt` |
+Paths below are on the **BYU experiment server filesystem** (not paths inside this GitHub repository alone). They are listed in full for lab reproducibility.
+
+- **Late-τ merge CSV:** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/analysis/late_tau_extension_20261124/merged_tau_summary.csv`
+- **Late-τ analysis (plots, validation):** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/analysis/late_tau_extension_20261124/`
+- **Phase 4 run root:** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/full_ckpt46000_phase4_proj2_20261110/`
+- **Late-τ run root:** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/full_ckpt46000_late_tau_parallel_test_20261124/`
+- **Canonical baseline run root:** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/full_ckpt46000_ab_full_baseline_canonical_20261125/`
+- **Figure build script (this repo on server):** `/yunity/jhwlds/report_github/byu-diffusion-research/scripts/build_followup_20261125_figures.py`
+- **Invalid legacy marker (do not use for baseline):** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/full_ckpt46000_ab_full_baseline_20261125/LEGACY_INVALID_AUDIT_B.txt`
 
 **Gradient proximity definitions** match the 2026-11-10 report (mid-block concat features, rank-grade NDCG@10, top-10 overlap, self excluded).
 
