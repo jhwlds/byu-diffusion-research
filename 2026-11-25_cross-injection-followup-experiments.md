@@ -100,6 +100,24 @@ Table values are **arithmetic means** over projection sets 0 and 1 (verified aga
 
 **Finding 4 — Late-τ gap does not monotonically decrease.** In the late band, NDCG gap falls to **0.208** at τ = 150, then **rises** to **0.268** at τ = 10 (overlap gap **0.296 → 0.341**). Thus the hypothesis that disruption **must** vanish at the end of denoising is **not supported**. This is **not** the same as claiming there is no structure: A→B **absolute** One-Step scores improve at small τ, but A→A is already near ceiling, so the **gap** can widen.
 
+#### Supplementary Analysis: Log-Scale Visualization of Late Denoising Timesteps
+
+**Figures 1–3** summarize all **nine** measured injection τ values on a **categorical** horizontal axis (equal spacing per τ), which is appropriate for comparing the full curve—including the mid-τ minimum near τ = 600. The panels below focus on the **late denoising band** τ ∈ {10, 25, 50, 100, 150, 200}: the horizontal axis uses the **actual τ values on a logarithmic scale** (range 10–200) so closely spaced small-τ points are easier to read. Values are unchanged projection-set means from the table above; no additional GPU work.
+
+![Figure A](visualizations/cross_injection_followup_20261125/late_log_figureA_ndcg10.png)
+
+*Figure A.* Late-τ One-Step **rank NDCG@10** (A→A vs A→B). Log-scaled injection τ; each marker is labeled with its τ value.
+
+![Figure B](visualizations/cross_injection_followup_20261125/late_log_figureB_top10_overlap.png)
+
+*Figure B.* Late-τ One-Step **top-10 overlap** (A→A vs A→B), same log τ axis as Figure A.
+
+![Figure C](visualizations/cross_injection_followup_20261125/late_log_figureC_gaps.png)
+
+*Figure C (primary supplementary view).* **Preservation gaps** (A→A − A→B) for the late band: **NDCG gap** (top panel) and **top-10 overlap gap** (bottom panel). Log-scaled τ highlights non-monotonic behavior that is easy to miss on the nine-point categorical plots.
+
+In this **measured** late-τ subset, both gaps **decrease** from τ = 200 toward τ = 150, reach their **minimum at τ = 150** among {10, 25, 50, 100, 150, 200}, then **increase again** from τ = 150 toward τ = 10 (NDCG gap **0.268**, top-10 overlap gap **0.341** at τ = 10). The neighborhood preservation gap does not monotonically decrease toward the end of denoising. Instead, it reaches a minimum around τ = 150 and increases again toward τ = 10. Under the late injection timesteps we measured, this pattern does **not** support the hypothesis that the A→B vs A→A difference **vanishes** in the final denoising stage; we state this as an empirical observation on the current τ grid, not as a new causal mechanism.
+
 ### 5. One-Step vs Full denoising
 
 **Full rank NDCG@10 (means; reference still at τ)**
@@ -248,6 +266,12 @@ Paths below are on the **BYU experiment server filesystem** (not paths inside th
 - **Late-τ run root:** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/full_ckpt46000_late_tau_parallel_test_20261124/`
 - **Canonical baseline run root:** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/full_ckpt46000_ab_full_baseline_canonical_20261125/`
 - **Figure build script (this repo on server):** `/yunity/jhwlds/report_github/byu-diffusion-research/scripts/build_followup_20261125_figures.py`
+- **Late-τ log-scale figure script (CPU only; no new gradients):** `/yunity/jhwlds/report_github/byu-diffusion-research/scripts/build_late_tau_log_figures.py`
+- **Late-τ log-scale figures (paths relative to this report in the repo):**
+  - `visualizations/cross_injection_followup_20261125/late_log_figureA_ndcg10.png`
+  - `visualizations/cross_injection_followup_20261125/late_log_figureB_top10_overlap.png`
+  - `visualizations/cross_injection_followup_20261125/late_log_figureC_gaps.png`
+- **Data for Figures A–C:** same `merged_tau_summary.csv` as above; **arithmetic mean over projection sets 0 and 1** per τ; gaps taken from the merged CSV (`gap_one_rank_ndcg10`, `gap_one_top10_overlap`).
 - **Invalid legacy marker (do not use for baseline):** `/yunity/jhwlds/experiments/fmnist_split_cross_injection/full_ckpt46000_ab_full_baseline_20261125/LEGACY_INVALID_AUDIT_B.txt`
 
 **Gradient proximity definitions** match the 2026-11-10 report (mid-block concat features, rank-grade NDCG@10, top-10 overlap, self excluded).
